@@ -285,14 +285,29 @@
   }
   .win-btn:active { transform: scale(0.96); }
   .queue-section { padding: 8px 16px 16px; }
+  .queue-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
   .queue-title {
     display: flex; align-items: center; gap: 6px;
     color: rgba(255,255,255,0.4);
     font-size: 13px; font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 10px;
+    margin-bottom: 0;
   }
+  .queue-clear-btn {
+    flex-shrink: 0;
+    background: rgba(239,68,68,0.15);
+    border: none;
+    color: #f87171;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 8px 12px;
+    border-radius: 999px;
+  }
+  .queue-clear-btn:active { background: rgba(239,68,68,0.28); }
+  .queue-clear-btn:disabled { opacity: 0.3; }
   .queue-empty {
     padding: 24px; text-align: center;
     background: rgba(255,255,255,0.05);
@@ -300,10 +315,31 @@
     color: rgba(255,255,255,0.3);
     font-size: 14px;
   }
+  .queue-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .queue-scroll-btn {
+    flex-shrink: 0;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .queue-scroll-btn:active { background: rgba(255,255,255,0.2); }
+  .queue-scroll-btn:disabled { opacity: 0.2; }
   .queue-list {
     display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
+    scroll-behavior: smooth;
+    flex: 1;
+    min-width: 0;
   }
   .queue-chip {
     flex-shrink: 0;
@@ -327,13 +363,6 @@
   .queue-chip .tagline { font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; }
   .queue-chip .drag-handle { color: rgba(255,255,255,0.3); font-size: 13px; padding: 4px; margin: -4px; }
   .queue-chip button { background: none; border: none; color: rgba(255,255,255,0.35); font-size: 15px; padding: 4px; touch-action: manipulation; }
-  .queue-scroll-hint {
-    text-align: center;
-    color: rgba(255,255,255,0.25);
-    font-size: 11px;
-    font-weight: 600;
-    margin-top: 2px;
-  }
   .standings-section { padding: 0 16px 32px; }
   .standings-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .standings-header-row .queue-title { margin-bottom: 0; }
@@ -399,7 +428,6 @@
     border-radius: 999px;
   }
 
-  /* Floating drag ghost element used by the pointer-based drag system */
   .drag-ghost {
     position: fixed;
     z-index: 9999;
@@ -415,7 +443,6 @@
     white-space: nowrap;
   }
 
-  /* Score entry modal, shown right after a winner is picked, or when editing a finished score */
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.65);
@@ -464,11 +491,9 @@
   .modal-btn.skip { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
   .modal-btn.confirm { background: #10b981; color: #000; }
 
-  /* Confirm-reset modal */
   .confirm-text { font-size: 14px; color: rgba(255,255,255,0.6); font-weight: 500; line-height: 1.4; }
   .modal-btn.danger { background: #ef4444; color: #fff; }
 
-  /* PIN lock modal for settings */
   .pin-dots { display: flex; gap: 12px; justify-content: center; margin: 6px 0; }
   .pin-dot {
     width: 16px; height: 16px;
@@ -557,7 +582,10 @@
 <div class="courts" id="courtsWrap"></div>
 
 <div class="queue-section">
-  <div class="queue-title">👥 Up Next (<span id="queueCount">0</span>) — drag to reorder or drop onto a court</div>
+  <div class="queue-title-row">
+    <div class="queue-title">👥 Up Next (<span id="queueCount">0</span>)</div>
+    <button class="queue-clear-btn" id="clearQueueBtn">Clear all</button>
+  </div>
   <div id="queueWrap"></div>
 </div>
 
@@ -581,42 +609,32 @@ const COURT_COLORS = [
 
 const STORAGE_KEY = 'clubAppState_v1';
 
-// ---- State ----
-// players: { name, gamesPlayed, wins, points }
-let players = [];          // full roster, in arrival order
-let waitingQueue = [];     // names: first-come queue for round 1 (players who haven't played yet, plus late arrivals)
-let winnersQueue = [];     // names waiting as "won last game", in order their win happened
-let losersQueue = [];      // names waiting as "lost last game", in order their loss happened
-let nextPullFromWinners = true; // alternation flag once round-robin phase begins
-let lockedPairs = [];      // [[nameA, nameB], ...]
-let selectedForLock = [];  // up to 2 names currently selected in setup UI
+let players = [];
+let waitingQueue = [];
+let winnersQueue = [];
+let losersQueue = [];
+let nextPullFromWinners = true;
+let lockedPairs = [];
+let selectedForLock = [];
 let numCourts = 2;
 let courts = Array.from({length: numCourts}, () => ({ teamA: [], teamB: [], teamAWon: null }));
-// courts[i].teamA/teamB store player name strings. We also track partner-history to avoid repeat pairings.
-let partnerHistory = {};   // name -> Set of names they've partnered with
-let renamingName = null;   // name currently being edited in roster list
+let partnerHistory = {};
+let renamingName = null;
 
-// Match history log — used so a finished score can be found and corrected later.
-// { id, names: {winners:[...], losers:[...]}, winnerScore, loserScore }
 let matchHistory = [];
 let matchIdCounter = 1;
 
-// Settings PIN lock
-let settingsPin = null;      // string of digits, or null if no PIN set
-let pinEntryBuffer = '';     // digits typed so far in the unlock/set modal
-let pinModalMode = null;     // 'unlock' | 'setNew' | 'setConfirm'
-let pinFirstEntry = '';      // holds first entry while confirming a new PIN
+let settingsPin = null;
+let pinEntryBuffer = '';
+let pinModalMode = null;
+let pinFirstEntry = '';
 let pinError = '';
 
-// Pending score entry (shown after a winner button is tapped, before the match is finalized)
-let pendingScore = null; // { courtIdx, winnerTeam, loserTeam }
-// Editing an already-recorded match's score
+let pendingScore = null;
 let editingMatchId = null;
-// Confirming a full reset
 let confirmingReset = false;
+let confirmingQueueClear = false;
 
-// Drag state: describes where the dragged player is coming from
-// { source: 'waiting'|'winners'|'losers'|'court', index, courtIdx, team }
 let dragInfo = null;
 
 const setupPanel = document.getElementById('setupPanel');
@@ -630,6 +648,7 @@ const lockedPairsWrap = document.getElementById('lockedPairsWrap');
 const courtsWrap = document.getElementById('courtsWrap');
 const queueWrap = document.getElementById('queueWrap');
 const queueCount = document.getElementById('queueCount');
+const clearQueueBtn = document.getElementById('clearQueueBtn');
 const standingsWrap = document.getElementById('standingsWrap');
 const subtitle = document.getElementById('subtitle');
 const modalRoot = document.getElementById('modalRoot');
@@ -692,15 +711,12 @@ function lockedPartnerOf(name) {
   return pair[0] === name ? pair[1] : pair[0];
 }
 
-// A player currently sitting on a court (mid-match) shouldn't also appear in the queue.
 function nameOnAnyCourt(name) {
   return courts.some(c => c.teamA.includes(name) || c.teamB.includes(name));
 }
 
-// ---- Persistence (works fully offline via localStorage) ----
 let saveTimer = null;
 function saveState() {
-  // Debounce slightly so rapid interactions (e.g. dragging) don't thrash storage.
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     try {
@@ -712,7 +728,6 @@ function saveState() {
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
     } catch (e) {
-      // Storage can fail (private mode, quota); app should keep working in-memory regardless.
       console.warn('Could not save state', e);
     }
   }, 150);
@@ -765,7 +780,6 @@ function updateOnlineStatus() {
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 
-// ---- Setup: players & locking ----
 function renderCountBtns() {
   countBtns.innerHTML = '';
   [1,2,3,4].forEach(n => {
@@ -817,12 +831,10 @@ function removePlayer(name) {
   saveState();
 }
 
-// Rename a player everywhere: roster, all queues, courts, locked pairs, partner history.
 function renamePlayer(oldName, newNameRaw) {
   const newName = newNameRaw.trim();
   if (!newName || newName === oldName) return;
   if (findPlayer(newName)) {
-    // name collision - just bail out quietly, keep old name
     return;
   }
   const p = findPlayer(oldName);
@@ -855,7 +867,7 @@ function renamePlayer(oldName, newNameRaw) {
 }
 
 function toggleSelectForLock(name) {
-  if (lockedPartnerOf(name)) return; // already locked, ignore
+  if (lockedPartnerOf(name)) return;
   const idx = selectedForLock.indexOf(name);
   if (idx >= 0) {
     selectedForLock.splice(idx, 1);
@@ -914,7 +926,6 @@ function renderRoster() {
       <button data-rmplayer="${escapeAttr(p.name)}">✕</button>`;
     chip.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
-      // single click toggles lock-selection; double click (or click-while-selected-elsewhere) can rename
       toggleSelectForLock(p.name);
     });
     chip.addEventListener('dblclick', (e) => {
@@ -943,72 +954,115 @@ function renderRoster() {
   });
 }
 
-// ---- Match forming logic ----
-
+// Picks one team (2 names) by scanning `pool` from the front. A locked player is only paired
+// with their partner if the partner is ALSO in `pool`; otherwise that locked player is skipped
+// (left for the caller to requeue) and scanning continues. `remainingPool` excludes both the
+// chosen team AND anyone already skipped along the way, so a second call on `remainingPool`
+// never re-skips (and re-lists) the same names. Returns
+// { team: [a,b], remainingPool, skipped: [names skipped before finding a team] } or null.
 function pickTeamFromPool(pool) {
-  if (pool.length === 0) return null;
-  const first = pool[0];
-  const lockedPartner = lockedPartnerOf(first);
-
-  if (lockedPartner) {
-    if (pool.includes(lockedPartner)) {
-      return [first, lockedPartner];
-    }
-    return null;
-  }
-
-  for (let i = 1; i < pool.length; i++) {
+  const skipped = [];
+  for (let i = 0; i < pool.length; i++) {
     const candidate = pool[i];
-    if (lockedPartnerOf(candidate)) continue;
-    if (!havePartneredBefore(first, candidate)) {
-      return [first, candidate];
+    const lockedPartner = lockedPartnerOf(candidate);
+
+    if (lockedPartner) {
+      // Only usable right now if the partner is also sitting in this same pool.
+      if (pool.includes(lockedPartner)) {
+        const remainingPool = pool.filter(n => n !== candidate && n !== lockedPartner && !skipped.includes(n));
+        return { team: [candidate, lockedPartner], remainingPool, skipped };
+      }
+      // Partner not available in this window: skip this locked player for now.
+      skipped.push(candidate);
+      continue;
     }
-  }
-  for (let i = 1; i < pool.length; i++) {
-    const candidate = pool[i];
-    if (lockedPartnerOf(candidate)) continue;
-    return [first, candidate];
+
+    // Unlocked candidate: prefer someone they haven't partnered with yet.
+    for (let j = i + 1; j < pool.length; j++) {
+      const other = pool[j];
+      if (lockedPartnerOf(other)) continue; // don't split up a locked pair to fill this slot
+      if (!havePartneredBefore(candidate, other)) {
+        const remainingPool = pool.filter(n => n !== candidate && n !== other && !skipped.includes(n));
+        return { team: [candidate, other], remainingPool, skipped };
+      }
+    }
+    // Fall back to any unlocked partner, even if they've played together before.
+    for (let j = i + 1; j < pool.length; j++) {
+      const other = pool[j];
+      if (lockedPartnerOf(other)) continue;
+      const remainingPool = pool.filter(n => n !== candidate && n !== other && !skipped.includes(n));
+      return { team: [candidate, other], remainingPool, skipped };
+    }
+    // Couldn't pair this candidate (everyone left is a locked player without their partner
+    // present in this window) — skip them too and keep scanning.
+    skipped.push(candidate);
   }
   return null;
 }
 
+// Forms a full 4-person match from `queueArr`, honoring locked pairs. Starts by looking at the
+// next 4 people in line. If someone in that window is locked but their partner isn't in view,
+// they're set aside (skipped) and one more person is pulled in from further back to compensate —
+// so the match still fills from 4 *usable* people without a locked player having to reach past
+// everyone else to grab a partner who's still far down the line. The window only grows up to a
+// capped lookahead so a locked pair with a partner deep in the queue doesn't block skip-ahead
+// entirely; skipped locked players are requeued right after the final window, keeping everyone
+// else's relative order intact so they naturally come up again later.
+const MATCH_MIN_WINDOW = 4;
+const MATCH_MAX_LOOKAHEAD = 12; // don't scan arbitrarily deep into a long queue
+function tryFormMatch(queueArr) {
+  if (queueArr.length < 4) return null;
+
+  let windowSize = MATCH_MIN_WINDOW;
+  let resultA, resultB;
+
+  while (true) {
+    const window = queueArr.slice(0, Math.min(windowSize, queueArr.length));
+    resultA = pickTeamFromPool(window);
+    resultB = resultA ? pickTeamFromPool(resultA.remainingPool) : null;
+
+    if (resultA && resultB) break; // found a full match within this window
+
+    // Not enough usable people yet — if there's more queue to look at and we haven't hit the
+    // cap, grow the window by one and try again. Otherwise give up.
+    if (windowSize < queueArr.length && windowSize < MATCH_MAX_LOOKAHEAD) {
+      windowSize += 1;
+      continue;
+    }
+    return null;
+  }
+
+  const windowSizeFinal = Math.min(windowSize, queueArr.length);
+  const window = queueArr.slice(0, windowSizeFinal);
+  const rest = queueArr.slice(windowSizeFinal);
+
+  const used = [...resultA.team, ...resultB.team];
+  const allSkipped = [...resultA.skipped, ...resultB.skipped];
+  const untouched = window.filter(n => !used.includes(n) && !allSkipped.includes(n));
+  const newQueueArr = [...allSkipped, ...untouched, ...rest];
+  return { teamA: resultA.team, teamB: resultB.team, newQueueArr };
+}
+
 function tryFormMatchFromWaiting() {
-  if (waitingQueue.length < 4) return null;
-  let pool = [...waitingQueue];
-  const teamA = pickTeamFromPool(pool);
-  if (!teamA) return null;
-  pool = pool.filter(n => !teamA.includes(n));
-  const teamB = pickTeamFromPool(pool);
-  if (!teamB) return null;
-  const used = [...teamA, ...teamB];
-  waitingQueue = waitingQueue.filter(n => !used.includes(n));
-  return { teamA, teamB };
+  const result = tryFormMatch(waitingQueue);
+  if (!result) return null;
+  waitingQueue = result.newQueueArr;
+  return { teamA: result.teamA, teamB: result.teamB };
 }
 
 function tryFormMatchFromResults() {
   const allPlayed = players.length > 0 && players.every(p => p.gamesPlayed > 0);
   if (!allPlayed) return null;
 
-  const tryPool = (poolArr) => {
-    if (poolArr.length < 4) return null;
-    let pool = [...poolArr];
-    const teamA = pickTeamFromPool(pool);
-    if (!teamA) return null;
-    pool = pool.filter(n => !teamA.includes(n));
-    const teamB = pickTeamFromPool(pool);
-    if (!teamB) return null;
-    return { teamA, teamB, used: [...teamA, ...teamB] };
-  };
-
   const order = nextPullFromWinners ? ['winners', 'losers'] : ['losers', 'winners'];
   for (const which of order) {
     const poolArr = which === 'winners' ? winnersQueue : losersQueue;
-    const result = tryPool(poolArr);
+    const result = tryFormMatch(poolArr);
     if (result) {
       if (which === 'winners') {
-        winnersQueue = winnersQueue.filter(n => !result.used.includes(n));
+        winnersQueue = result.newQueueArr;
       } else {
-        losersQueue = losersQueue.filter(n => !result.used.includes(n));
+        losersQueue = result.newQueueArr;
       }
       nextPullFromWinners = !nextPullFromWinners;
       return { teamA: result.teamA, teamB: result.teamB };
@@ -1037,7 +1091,7 @@ function removePlayerFromCourt(courtIdx, team, playerIdx) {
   const name = courts[courtIdx][team][playerIdx];
   courts[courtIdx][team].splice(playerIdx, 1);
   if (name) {
-    waitingQueue.unshift(name); // bump back to front of line since their game was interrupted
+    waitingQueue.unshift(name);
     const p = findPlayer(name);
     if (p) p.gamesPlayed = Math.max(0, p.gamesPlayed - 1);
   }
@@ -1045,7 +1099,6 @@ function removePlayerFromCourt(courtIdx, team, playerIdx) {
   saveState();
 }
 
-// Step 1: winner button tapped -> open score entry modal instead of finalizing immediately.
 function reportResult(courtIdx, winnerTeam) {
   const court = courts[courtIdx];
   const loserTeam = winnerTeam === 'teamA' ? 'teamB' : 'teamA';
@@ -1054,7 +1107,6 @@ function reportResult(courtIdx, winnerTeam) {
   renderModal();
 }
 
-// Step 2: score modal confirmed (or skipped) -> finalize the match.
 function finalizeResult(winnerScore, loserScore) {
   if (!pendingScore) return;
   const { courtIdx, winnerTeam, loserTeam } = pendingScore;
@@ -1093,7 +1145,6 @@ function finalizeResult(winnerScore, loserScore) {
 }
 
 function cancelScoreEntry() {
-  // Same as finalizing with no score recorded — the match result (win/loss) still counts.
   finalizeResult(null, null);
 }
 
@@ -1110,7 +1161,6 @@ function clearCourt(courtIdx) {
   saveState();
 }
 
-// ---- Edit a previously recorded score ----
 function openEditScore(matchId) {
   editingMatchId = matchId;
   renderModal();
@@ -1124,9 +1174,6 @@ function saveEditedScore(matchId, winnerScore, loserScore) {
   const match = findMatch(matchId);
   if (!match) { editingMatchId = null; renderModal(); return; }
 
-  // Undo the old point contribution, then apply the new one. Win/loss counts don't change,
-  // only the points — since the underlying win/loss result already happened and only the
-  // recorded score is being corrected.
   if (typeof match.winnerScore === 'number') {
     match.names.winners.forEach(name => {
       const p = findPlayer(name);
@@ -1161,10 +1208,7 @@ function saveEditedScore(matchId, winnerScore, loserScore) {
   saveState();
 }
 
-// ---- Refresh standings / Start over ----
 function refreshStandings() {
-  // Standings are always computed live from `players`, so a stuck-looking view (e.g. after
-  // restoring a session) just needs a re-render.
   renderStandings();
 }
 refreshStandingsBtn.onclick = refreshStandings;
@@ -1175,14 +1219,11 @@ startOverBtn.onclick = () => {
 };
 
 function performStartOver() {
-  // Reset scores/results but keep everyone in the queue so play can continue immediately.
   const allNames = players.map(p => p.name);
   players.forEach(p => { p.gamesPlayed = 0; p.wins = 0; p.points = 0; });
 
-  // Pull everyone off courts and out of the winners/losers queues back into one waiting line,
-  // preserving roster order, so nobody is lost from the queue.
   courts.forEach(c => { c.teamA = []; c.teamB = []; c.teamAWon = null; });
-  waitingQueue = allNames.filter(n => !waitingQueue.includes(n) ? true : true); // keep computed below
+  waitingQueue = allNames.filter(n => !waitingQueue.includes(n) ? true : true);
   waitingQueue = [...new Set([...waitingQueue, ...winnersQueue, ...losersQueue, ...allNames])].filter(n => findPlayer(n));
   winnersQueue = [];
   losersQueue = [];
@@ -1194,17 +1235,21 @@ function performStartOver() {
   saveState();
 }
 
-// ---- Drag & drop helpers ----
-// Every "slot" a player can occupy has a location descriptor:
-//   { source: 'waiting', index }
-//   { source: 'winners', index }
-//   { source: 'losers', index }
-//   { source: 'court', courtIdx, team, index }
-// We support: reordering within the same queue, moving between waiting/winners/losers queues,
-// moving a queued player onto an empty court team slot, moving a court player back to a queue,
-// and swapping two court players (or a court player with a queue player).
-// If the dragged player has a locked partner sitting in the SAME queue, dropping the dragged
-// player onto a court automatically brings the locked partner along as the other half of that team.
+clearQueueBtn.onclick = () => {
+  const total = waitingQueue.length + winnersQueue.length + losersQueue.length;
+  if (total === 0) return;
+  confirmingQueueClear = true;
+  renderModal();
+};
+
+function performQueueClear() {
+  waitingQueue = [];
+  winnersQueue = [];
+  losersQueue = [];
+  confirmingQueueClear = false;
+  renderAll();
+  saveState();
+}
 
 function getArrayForLocation(loc) {
   if (loc.source === 'waiting') return waitingQueue;
@@ -1234,12 +1279,11 @@ function removeAtLocation(loc) {
 function insertAtLocation(loc, name) {
   if (loc.source === 'court') {
     const team = courts[loc.courtIdx][loc.team];
-    if (team.length >= 2) return false; // slot full, caller should have handled swap
+    if (team.length >= 2) return false;
     const idx = (loc.index === null || loc.index === undefined) ? team.length : loc.index;
     team.splice(idx, 0, name);
     const p = findPlayer(name);
     if (p) p.gamesPlayed += 1;
-    // record partnership if the team is now complete
     if (team.length === 2) recordPartner(team[0], team[1]);
     return true;
   }
@@ -1257,7 +1301,6 @@ function locationsEqual(a, b) {
   return a.index === b.index;
 }
 
-// Find the other open slot on the same team as `slotLoc`, if any.
 function otherSlotOnTeam(courtIdx, team, indexToExclude) {
   for (let i = 0; i < 2; i++) {
     if (i !== indexToExclude) return { source: 'court', courtIdx, team, index: i };
@@ -1265,7 +1308,6 @@ function otherSlotOnTeam(courtIdx, team, indexToExclude) {
   return null;
 }
 
-// Handle a drop: dragInfo describes the origin, targetLoc describes destination.
 function handleDrop(targetLoc) {
   if (!dragInfo) return;
   if (locationsEqual(dragInfo, targetLoc)) { dragInfo = null; renderAll(); return; }
@@ -1273,30 +1315,24 @@ function handleDrop(targetLoc) {
   const draggedName = getNameAt(dragInfo);
   if (!draggedName) { dragInfo = null; renderAll(); return; }
 
-  // Case: target is a court slot
   if (targetLoc.source === 'court') {
     const team = courts[targetLoc.courtIdx][targetLoc.team];
     const occupantName = team[targetLoc.index] !== undefined ? team[targetLoc.index] : null;
 
     if (occupantName) {
-      // Swap: remove dragged from origin, remove occupant from target, place each in the other's spot
       removeAtLocation(dragInfo);
-      // recompute occupant index after potential shift (only matters if same array, but court arrays are separate from queues so fine)
       const teamAfter = courts[targetLoc.courtIdx][targetLoc.team];
       const occIdx = teamAfter.indexOf(occupantName);
       teamAfter.splice(occIdx, 1);
       const pOcc = findPlayer(occupantName);
       if (pOcc) pOcc.gamesPlayed = Math.max(0, pOcc.gamesPlayed - 1);
 
-      // place dragged into target slot
       teamAfter.splice(Math.min(targetLoc.index, teamAfter.length), 0, draggedName);
       const pDragged = findPlayer(draggedName);
       if (pDragged) pDragged.gamesPlayed += 1;
 
-      // place occupant into dragged's original slot
       insertAtLocation(dragInfo, occupantName);
 
-      // if either team is now complete, record partnership
       if (teamAfter.length === 2) recordPartner(teamAfter[0], teamAfter[1]);
       const originTeamArr = dragInfo.source === 'court' ? courts[dragInfo.courtIdx][dragInfo.team] : null;
       if (originTeamArr && originTeamArr.length === 2) recordPartner(originTeamArr[0], originTeamArr[1]);
@@ -1304,14 +1340,10 @@ function handleDrop(targetLoc) {
       finishDropAndRender();
       return;
     } else {
-      // Target slot empty: just move dragged there
       if (team.length >= 2) { dragInfo = null; renderAll(); return; }
       removeAtLocation(dragInfo);
       insertAtLocation({ source: 'court', courtIdx: targetLoc.courtIdx, team: targetLoc.team, index: team.length }, draggedName);
 
-      // Auto-bring the locked partner along, if the dragged player has one and that
-      // partner is sitting in a queue (not already on a court), and there's an open
-      // slot to place them (same team's other slot, preferred, else the other team's open slot).
       const partnerName = lockedPartnerOf(draggedName);
       if (partnerName && !nameOnAnyCourt(partnerName)) {
         const partnerLoc = findQueueLocationOf(partnerName);
@@ -1337,14 +1369,12 @@ function handleDrop(targetLoc) {
       }
     }
   } else {
-    // Target is a queue (waiting/winners/losers)
     const targetArr = getArrayForLocation(targetLoc);
     const isSameArray = dragInfo.source === targetLoc.source;
 
     removeAtLocation(dragInfo);
 
     let insertIdx = targetLoc.index;
-    // If reordering within the same array and dragged item was before the target, index shifts down by 1
     if (isSameArray && dragInfo.index < targetLoc.index) {
       insertIdx = targetLoc.index - 1;
     }
@@ -1361,7 +1391,6 @@ function finishDropAndRender() {
   saveState();
 }
 
-// Locate a name within whichever queue (waiting/winners/losers) it currently sits in.
 function findQueueLocationOf(name) {
   let idx = waitingQueue.indexOf(name);
   if (idx >= 0) return { source: 'waiting', index: idx };
@@ -1372,15 +1401,9 @@ function findQueueLocationOf(name) {
   return null;
 }
 
-// ==== Pointer-based drag & drop engine ====
-// Native HTML5 drag-and-drop (draggable/dragstart/dragover/drop) does not fire from touch
-// gestures on iOS Safari or most mobile browsers, which is why dragging silently did nothing
-// on a phone. This engine uses Pointer Events instead, which unify mouse, touch, and pen,
-// and works the same way everywhere. It drives the exact same dragInfo / handleDrop logic above.
+const DRAG_THRESHOLD = 6;
 
-const DRAG_THRESHOLD = 6; // px of movement before a press becomes a drag (lets taps/clicks still work)
-
-let pointerDragState = null; // { startX, startY, loc, el, ghostEl, active, pointerId }
+let pointerDragState = null;
 let ghostEl = null;
 
 function makeGhost(label, x, y) {
@@ -1398,17 +1421,11 @@ function clearDragVisualState() {
   document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
 }
 
-// Attach a draggable source. `el` is the element the user presses on to begin dragging,
-// `loc` is its location descriptor, `label` is the text shown in the floating ghost,
-// and `rowEl` is the element that should visually dim while dragging (may equal el).
 function makeDraggable(el, loc, label, rowEl) {
   el.addEventListener('pointerdown', (e) => {
-    // Ignore drags initiated on buttons/inputs so taps like ✕ or rename still work
     if (e.target.closest('button') || e.target.closest('input')) return;
     if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
 
-    // If this player has a locked partner also sitting in a queue, show the pair name so it's
-    // clear both will move together.
     const partnerName = lockedPartnerOf(label);
     const ghostLabel = (partnerName && findQueueLocationOf(partnerName)) ? `${label} + ${partnerName}` : label;
 
@@ -1425,7 +1442,6 @@ function makeDraggable(el, loc, label, rowEl) {
 }
 
 function findDropTargetAt(x, y) {
-  // Temporarily hide the ghost so elementFromPoint sees what's underneath it
   if (ghostEl) ghostEl.style.display = 'none';
   const el = document.elementFromPoint(x, y);
   if (ghostEl) ghostEl.style.display = '';
@@ -1476,7 +1492,6 @@ document.addEventListener('pointermove', (e) => {
 
   if (!pointerDragState.active) {
     if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
-    // Begin the actual drag
     pointerDragState.active = true;
     dragInfo = pointerDragState.loc;
     pointerDragState.rowEl.classList.add('dragging');
@@ -1523,8 +1538,6 @@ document.addEventListener('pointercancel', () => {
   dragInfo = null;
   pointerDragState = null;
 }, { passive: true });
-
-// ---- Rendering ----
 
 function renderCourts() {
   courtsWrap.innerHTML = '';
@@ -1606,7 +1619,6 @@ function renderCourts() {
     };
   });
 
-  // Player-row pointer-drag handlers (works for mouse, touch, and pen)
   courtsWrap.querySelectorAll('[data-player-row]').forEach(row => {
     const [courtIdx, team, index] = row.dataset.playerRow.split('|');
     const loc = { source: 'court', courtIdx: parseInt(courtIdx), team, index: parseInt(index) };
@@ -1635,22 +1647,19 @@ function renderCourtSlotHtml(courtIdx, team, index, name, color) {
   </div>`;
 }
 
-// The queue should always show every roster player who is NOT currently on a court —
-// whether they haven't played yet (waitingQueue) or have just finished a game
-// (winnersQueue / losersQueue) — regardless of whether the full roster has
-// been filled or whether every player has played at least once. This way, with fewer
-// players on the roster, someone who just finished a match reappears in the queue immediately
-// and can be dragged into a new match right away.
 function renderQueue() {
   const total = waitingQueue.length + winnersQueue.length + losersQueue.length;
   queueCount.textContent = total;
+  clearQueueBtn.disabled = total === 0;
 
   if (total === 0) {
     queueWrap.innerHTML = `<div class="queue-empty">No one waiting. Add players above.</div>`;
     return;
   }
 
-  let html = `<div class="queue-list" id="queueList">`;
+  let html = `<div class="queue-row">`;
+  html += `<button class="queue-scroll-btn" id="queueScrollLeft" aria-label="Scroll left">‹</button>`;
+  html += `<div class="queue-list" id="queueList">`;
 
   waitingQueue.forEach((name, i) => {
     const partner = lockedPartnerOf(name);
@@ -1682,9 +1691,8 @@ function renderQueue() {
   });
 
   html += `</div>`;
-  if (total > 5) {
-    html += `<div class="queue-scroll-hint">← scroll to see everyone (${total} waiting) →</div>`;
-  }
+  html += `<button class="queue-scroll-btn" id="queueScrollRight" aria-label="Scroll right">›</button>`;
+  html += `</div>`;
   queueWrap.innerHTML = html;
 
   queueWrap.querySelectorAll('[data-rmq]').forEach(btn => {
@@ -1699,17 +1707,38 @@ function renderQueue() {
     };
   });
 
-  // Pointer-drag handlers for queue chips: reordering + moving between waiting/winners/losers
   queueWrap.querySelectorAll('.queue-chip').forEach(chip => {
     const loc = { source: chip.dataset.qsource, index: parseInt(chip.dataset.qindex) };
     const nameEl = chip.querySelector('.name');
     const label = nameEl ? nameEl.textContent.replace(' 🔗', '') : '';
     makeDraggable(chip, loc, label, chip);
   });
+
+  const queueListEl = document.getElementById('queueList');
+  const leftBtn = document.getElementById('queueScrollLeft');
+  const rightBtn = document.getElementById('queueScrollRight');
+
+  function scrollByAmount(dir) {
+    if (!queueListEl) return;
+    const amount = Math.max(120, queueListEl.clientWidth * 0.8) * dir;
+    queueListEl.scrollBy({ left: amount, behavior: 'smooth' });
+  }
+
+  function updateScrollBtnState() {
+    if (!queueListEl || !leftBtn || !rightBtn) return;
+    const maxScroll = queueListEl.scrollWidth - queueListEl.clientWidth;
+    leftBtn.disabled = queueListEl.scrollLeft <= 2;
+    rightBtn.disabled = queueListEl.scrollLeft >= maxScroll - 2;
+  }
+
+  if (leftBtn) leftBtn.onclick = () => scrollByAmount(-1);
+  if (rightBtn) rightBtn.onclick = () => scrollByAmount(1);
+  if (queueListEl) {
+    queueListEl.addEventListener('scroll', updateScrollBtnState, { passive: true });
+    setTimeout(updateScrollBtnState, 0);
+  }
 }
 
-// Standings: ranked highest to lowest, primarily by total running score (points),
-// with total wins shown alongside. Ties broken by wins, then games played.
 function renderStandings() {
   if (players.length === 0) {
     standingsWrap.innerHTML = `<div class="queue-empty">No players yet.</div>`;
@@ -1733,7 +1762,6 @@ function renderStandings() {
     standingsWrap.appendChild(row);
   });
 
-  // Below the ranking, list recent finished matches with a way to correct a score.
   if (matchHistory.length > 0) {
     const historyHeader = document.createElement('div');
     historyHeader.style.cssText = 'margin-top:14px;color:rgba(255,255,255,0.3);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;';
@@ -1762,7 +1790,6 @@ function renderStandings() {
   }
 }
 
-// ---- Score entry modal (also reused for editing a past score) ----
 function renderScoreModal() {
   if (pendingScore) {
     const { courtIdx, winnerTeam, loserTeam } = pendingScore;
@@ -1842,7 +1869,6 @@ function wireScoreModal() {
   setTimeout(() => winnerInput && winnerInput.focus(), 50);
 }
 
-// ---- Confirm start-over modal ----
 function renderConfirmResetModal() {
   if (!confirmingReset) return '';
   return `<div class="modal-overlay" id="confirmResetOverlay">
@@ -1864,7 +1890,27 @@ function wireConfirmResetModal() {
   document.getElementById('confirmResetBtn').onclick = () => performStartOver();
 }
 
-// ---- PIN modal ----
+function renderConfirmQueueClearModal() {
+  if (!confirmingQueueClear) return '';
+  return `<div class="modal-overlay" id="confirmQueueClearOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Clear the queue?</div>
+      <div class="confirm-text">This removes everyone from Up Next (waiting, and just-finished winners/losers). Players already on a court are not affected. This doesn't touch scores or standings.</div>
+      <div class="modal-btn-row">
+        <button class="modal-btn skip" id="cancelQueueClearBtn">Cancel</button>
+        <button class="modal-btn danger" id="confirmQueueClearBtn">Clear queue</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function wireConfirmQueueClearModal() {
+  const overlay = document.getElementById('confirmQueueClearOverlay');
+  if (!overlay) return;
+  document.getElementById('cancelQueueClearBtn').onclick = () => { confirmingQueueClear = false; renderModal(); };
+  document.getElementById('confirmQueueClearBtn').onclick = () => performQueueClear();
+}
+
 function openPinModal(mode) {
   pinModalMode = mode;
   pinEntryBuffer = '';
@@ -1979,6 +2025,9 @@ function renderModal() {
   } else if (confirmingReset) {
     modalRoot.innerHTML = renderConfirmResetModal();
     wireConfirmResetModal();
+  } else if (confirmingQueueClear) {
+    modalRoot.innerHTML = renderConfirmQueueClearModal();
+    wireConfirmQueueClearModal();
   } else if (pendingScore || editingMatchId !== null) {
     modalRoot.innerHTML = renderScoreModal();
     wireScoreModal();
@@ -2012,7 +2061,6 @@ function renderAll() {
   renderModal();
 }
 
-// ---- Boot ----
 const hadSavedSession = loadState();
 updateOnlineStatus();
 renderAll();
@@ -2024,4 +2072,3 @@ dismissRecoveredBtn.onclick = () => recoveredBanner.classList.remove('show');
 
 </body>
 </html>
-
