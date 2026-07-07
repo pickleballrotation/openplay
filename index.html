@@ -302,6 +302,8 @@
   }
   .queue-list {
     display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
   .queue-chip {
     flex-shrink: 0;
@@ -325,7 +327,29 @@
   .queue-chip .tagline { font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; }
   .queue-chip .drag-handle { color: rgba(255,255,255,0.3); font-size: 13px; padding: 4px; margin: -4px; }
   .queue-chip button { background: none; border: none; color: rgba(255,255,255,0.35); font-size: 15px; padding: 4px; touch-action: manipulation; }
+  .queue-scroll-hint {
+    text-align: center;
+    color: rgba(255,255,255,0.25);
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
   .standings-section { padding: 0 16px 32px; }
+  .standings-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .standings-header-row .queue-title { margin-bottom: 0; }
+  .refresh-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 8px 12px;
+    border-radius: 999px;
+  }
+  .refresh-btn:active { background: rgba(255,255,255,0.15); }
   .standings-list { display: flex; flex-direction: column; gap: 6px; }
   .standings-row {
     display: flex; align-items: center; gap: 10px;
@@ -339,6 +363,41 @@
   .standings-row .pstat { color: rgba(255,255,255,0.5); font-size: 12px; font-weight: 700; }
   .standings-row .pwins { color: #F2C94C; font-weight: 800; font-size: 13px; }
   .standings-row .pscore { color: #6ee7b7; font-weight: 800; font-size: 13px; min-width: 62px; text-align: right; }
+  .edit-score-btn {
+    background: none; border: none; color: rgba(255,255,255,0.3);
+    font-size: 14px; padding: 4px; line-height: 1; flex-shrink: 0;
+  }
+  .offline-banner {
+    display: none;
+    padding: 8px 20px;
+    background: #7c2d12;
+    color: #fed7aa;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.3px;
+  }
+  .offline-banner.show { display: block; }
+  .recovered-banner {
+    display: none;
+    padding: 8px 20px;
+    background: #164e3f;
+    color: #6ee7b7;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.3px;
+  }
+  .recovered-banner.show { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .recovered-banner button {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
 
   /* Floating drag ghost element used by the pointer-based drag system */
   .drag-ghost {
@@ -356,7 +415,7 @@
     white-space: nowrap;
   }
 
-  /* Score entry modal, shown right after a winner is picked */
+  /* Score entry modal, shown right after a winner is picked, or when editing a finished score */
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.65);
@@ -405,6 +464,10 @@
   .modal-btn.skip { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
   .modal-btn.confirm { background: #10b981; color: #000; }
 
+  /* Confirm-reset modal */
+  .confirm-text { font-size: 14px; color: rgba(255,255,255,0.6); font-weight: 500; line-height: 1.4; }
+  .modal-btn.danger { background: #ef4444; color: #fff; }
+
   /* PIN lock modal for settings */
   .pin-dots { display: flex; gap: 12px; justify-content: center; margin: 6px 0; }
   .pin-dot {
@@ -435,6 +498,9 @@
 </style>
 </head>
 <body>
+
+<div class="offline-banner" id="offlineBanner">📡 Offline — everything still works, changes are saved on this device</div>
+<div class="recovered-banner" id="recoveredBanner">✅ Restored your last session <button id="dismissRecoveredBtn">Dismiss</button></div>
 
 <div class="header">
   <div>
@@ -478,6 +544,14 @@
     </div>
     <div class="setup-hint" id="pinStatusHint">No PIN set — anyone can open Settings.</div>
   </div>
+
+  <div class="setup-section">
+    <div class="setup-label">Session</div>
+    <div class="add-row">
+      <button class="lock-btn" id="startOverBtn" style="background:#ef4444;">Start over (reset scores)</button>
+    </div>
+    <div class="setup-hint">Clears standings and courts. Everyone stays in the queue.</div>
+  </div>
 </div>
 
 <div class="courts" id="courtsWrap"></div>
@@ -488,7 +562,10 @@
 </div>
 
 <div class="standings-section">
-  <div class="queue-title">🏆 Standings</div>
+  <div class="standings-header-row">
+    <div class="queue-title">🏆 Standings</div>
+    <button class="refresh-btn" id="refreshStandingsBtn">↻ Refresh</button>
+  </div>
   <div class="standings-list" id="standingsWrap"></div>
 </div>
 
@@ -501,6 +578,8 @@ const COURT_COLORS = [
   { bg: "#3D2B56", accent: "#8FD4A1" },
   { bg: "#5C2A2A", accent: "#E8D5A6" },
 ];
+
+const STORAGE_KEY = 'clubAppState_v1';
 
 // ---- State ----
 // players: { name, gamesPlayed, wins, points }
@@ -517,6 +596,11 @@ let courts = Array.from({length: numCourts}, () => ({ teamA: [], teamB: [], team
 let partnerHistory = {};   // name -> Set of names they've partnered with
 let renamingName = null;   // name currently being edited in roster list
 
+// Match history log — used so a finished score can be found and corrected later.
+// { id, names: {winners:[...], losers:[...]}, winnerScore, loserScore }
+let matchHistory = [];
+let matchIdCounter = 1;
+
 // Settings PIN lock
 let settingsPin = null;      // string of digits, or null if no PIN set
 let pinEntryBuffer = '';     // digits typed so far in the unlock/set modal
@@ -526,6 +610,10 @@ let pinError = '';
 
 // Pending score entry (shown after a winner button is tapped, before the match is finalized)
 let pendingScore = null; // { courtIdx, winnerTeam, loserTeam }
+// Editing an already-recorded match's score
+let editingMatchId = null;
+// Confirming a full reset
+let confirmingReset = false;
 
 // Drag state: describes where the dragged player is coming from
 // { source: 'waiting'|'winners'|'losers'|'court', index, courtIdx, team }
@@ -548,6 +636,11 @@ const modalRoot = document.getElementById('modalRoot');
 const setPinBtn = document.getElementById('setPinBtn');
 const clearPinBtn = document.getElementById('clearPinBtn');
 const pinStatusHint = document.getElementById('pinStatusHint');
+const startOverBtn = document.getElementById('startOverBtn');
+const refreshStandingsBtn = document.getElementById('refreshStandingsBtn');
+const offlineBanner = document.getElementById('offlineBanner');
+const recoveredBanner = document.getElementById('recoveredBanner');
+const dismissRecoveredBtn = document.getElementById('dismissRecoveredBtn');
 
 gearBtn.onclick = () => {
   if (setupPanel.classList.contains('open')) {
@@ -568,6 +661,7 @@ setPinBtn.onclick = () => {
 clearPinBtn.onclick = () => {
   settingsPin = null;
   renderPinStatus();
+  saveState();
 };
 
 function renderPinStatus() {
@@ -603,6 +697,74 @@ function nameOnAnyCourt(name) {
   return courts.some(c => c.teamA.includes(name) || c.teamB.includes(name));
 }
 
+// ---- Persistence (works fully offline via localStorage) ----
+let saveTimer = null;
+function saveState() {
+  // Debounce slightly so rapid interactions (e.g. dragging) don't thrash storage.
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      const snapshot = {
+        players, waitingQueue, winnersQueue, losersQueue, nextPullFromWinners,
+        lockedPairs, numCourts, courts, partnerHistory: serializePartnerHistory(),
+        matchHistory, matchIdCounter, settingsPin,
+        savedAt: Date.now()
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    } catch (e) {
+      // Storage can fail (private mode, quota); app should keep working in-memory regardless.
+      console.warn('Could not save state', e);
+    }
+  }, 150);
+}
+
+function serializePartnerHistory() {
+  const out = {};
+  Object.keys(partnerHistory).forEach(k => { out[k] = Array.from(partnerHistory[k]); });
+  return out;
+}
+
+function deserializePartnerHistory(obj) {
+  const out = {};
+  Object.keys(obj || {}).forEach(k => { out[k] = new Set(obj[k]); });
+  return out;
+}
+
+function loadState() {
+  let raw;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch (e) {
+    return false;
+  }
+  if (!raw) return false;
+  try {
+    const snap = JSON.parse(raw);
+    players = snap.players || [];
+    waitingQueue = snap.waitingQueue || [];
+    winnersQueue = snap.winnersQueue || [];
+    losersQueue = snap.losersQueue || [];
+    nextPullFromWinners = snap.nextPullFromWinners !== undefined ? snap.nextPullFromWinners : true;
+    lockedPairs = snap.lockedPairs || [];
+    numCourts = snap.numCourts || 2;
+    courts = snap.courts || Array.from({length: numCourts}, () => ({ teamA: [], teamB: [], teamAWon: null }));
+    partnerHistory = deserializePartnerHistory(snap.partnerHistory);
+    matchHistory = snap.matchHistory || [];
+    matchIdCounter = snap.matchIdCounter || 1;
+    settingsPin = snap.settingsPin || null;
+    return players.length > 0 || waitingQueue.length > 0 || matchHistory.length > 0;
+  } catch (e) {
+    console.warn('Could not parse saved state', e);
+    return false;
+  }
+}
+
+function updateOnlineStatus() {
+  offlineBanner.classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+
 // ---- Setup: players & locking ----
 function renderCountBtns() {
   countBtns.innerHTML = '';
@@ -615,6 +777,7 @@ function renderCountBtns() {
       const next = Array.from({length: n}, (_, i) => courts[i] || {teamA: [], teamB: [], teamAWon: null});
       courts = next;
       renderAll();
+      saveState();
     };
     countBtns.appendChild(b);
   });
@@ -634,6 +797,7 @@ function addPlayer() {
   waitingQueue.push(name);
   nameInput.value = '';
   renderAll();
+  saveState();
 }
 
 function removePlayer(name) {
@@ -650,6 +814,7 @@ function removePlayer(name) {
   delete partnerHistory[name];
   Object.values(partnerHistory).forEach(set => set.delete(name));
   renderAll();
+  saveState();
 }
 
 // Rename a player everywhere: roster, all queues, courts, locked pairs, partner history.
@@ -674,6 +839,11 @@ function renamePlayer(oldName, newNameRaw) {
   });
   lockedPairs = lockedPairs.map(pair => pair.map(n => n === oldName ? newName : n));
   selectedForLock = swap(selectedForLock);
+
+  matchHistory.forEach(m => {
+    m.names.winners = swap(m.names.winners);
+    m.names.losers = swap(m.names.losers);
+  });
 
   if (partnerHistory[oldName]) {
     partnerHistory[newName] = partnerHistory[oldName];
@@ -700,11 +870,13 @@ lockBtn.onclick = () => {
   lockedPairs.push([selectedForLock[0], selectedForLock[1]]);
   selectedForLock = [];
   renderAll();
+  saveState();
 };
 
 function unlockPair(idx) {
   lockedPairs.splice(idx, 1);
   renderAll();
+  saveState();
 }
 
 function renderRoster() {
@@ -727,6 +899,7 @@ function renderRoster() {
         renamePlayer(p.name, input.value);
         renamingName = null;
         renderAll();
+        saveState();
       };
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter') commit();
@@ -857,6 +1030,7 @@ function fillCourtFromQueue(courtIdx) {
     if (p) p.gamesPlayed += 1;
   });
   renderAll();
+  saveState();
 }
 
 function removePlayerFromCourt(courtIdx, team, playerIdx) {
@@ -868,6 +1042,7 @@ function removePlayerFromCourt(courtIdx, team, playerIdx) {
     if (p) p.gamesPlayed = Math.max(0, p.gamesPlayed - 1);
   }
   renderAll();
+  saveState();
 }
 
 // Step 1: winner button tapped -> open score entry modal instead of finalizing immediately.
@@ -884,8 +1059,8 @@ function finalizeResult(winnerScore, loserScore) {
   if (!pendingScore) return;
   const { courtIdx, winnerTeam, loserTeam } = pendingScore;
   const court = courts[courtIdx];
-  const winners = court[winnerTeam];
-  const losers = court[loserTeam];
+  const winners = [...court[winnerTeam]];
+  const losers = [...court[loserTeam]];
 
   winners.forEach(name => {
     const p = findPlayer(name);
@@ -901,12 +1076,20 @@ function finalizeResult(winnerScore, loserScore) {
     });
   }
 
+  matchHistory.push({
+    id: matchIdCounter++,
+    names: { winners, losers },
+    winnerScore: typeof winnerScore === 'number' ? winnerScore : null,
+    loserScore: typeof loserScore === 'number' ? loserScore : null
+  });
+
   winnersQueue = [...winnersQueue, ...winners];
   losersQueue = [...losersQueue, ...losers];
 
   courts[courtIdx] = { teamA: [], teamB: [], teamAWon: null };
   pendingScore = null;
   renderAll();
+  saveState();
 }
 
 function cancelScoreEntry() {
@@ -924,6 +1107,91 @@ function clearCourt(courtIdx) {
   });
   courts[courtIdx] = { teamA: [], teamB: [], teamAWon: null };
   renderAll();
+  saveState();
+}
+
+// ---- Edit a previously recorded score ----
+function openEditScore(matchId) {
+  editingMatchId = matchId;
+  renderModal();
+}
+
+function findMatch(matchId) {
+  return matchHistory.find(m => m.id === matchId);
+}
+
+function saveEditedScore(matchId, winnerScore, loserScore) {
+  const match = findMatch(matchId);
+  if (!match) { editingMatchId = null; renderModal(); return; }
+
+  // Undo the old point contribution, then apply the new one. Win/loss counts don't change,
+  // only the points — since the underlying win/loss result already happened and only the
+  // recorded score is being corrected.
+  if (typeof match.winnerScore === 'number') {
+    match.names.winners.forEach(name => {
+      const p = findPlayer(name);
+      if (p) p.points -= match.winnerScore;
+    });
+  }
+  if (typeof match.loserScore === 'number') {
+    match.names.losers.forEach(name => {
+      const p = findPlayer(name);
+      if (p) p.points -= match.loserScore;
+    });
+  }
+
+  match.winnerScore = typeof winnerScore === 'number' ? winnerScore : null;
+  match.loserScore = typeof loserScore === 'number' ? loserScore : null;
+
+  if (typeof match.winnerScore === 'number') {
+    match.names.winners.forEach(name => {
+      const p = findPlayer(name);
+      if (p) p.points += match.winnerScore;
+    });
+  }
+  if (typeof match.loserScore === 'number') {
+    match.names.losers.forEach(name => {
+      const p = findPlayer(name);
+      if (p) p.points += match.loserScore;
+    });
+  }
+
+  editingMatchId = null;
+  renderAll();
+  saveState();
+}
+
+// ---- Refresh standings / Start over ----
+function refreshStandings() {
+  // Standings are always computed live from `players`, so a stuck-looking view (e.g. after
+  // restoring a session) just needs a re-render.
+  renderStandings();
+}
+refreshStandingsBtn.onclick = refreshStandings;
+
+startOverBtn.onclick = () => {
+  confirmingReset = true;
+  renderModal();
+};
+
+function performStartOver() {
+  // Reset scores/results but keep everyone in the queue so play can continue immediately.
+  const allNames = players.map(p => p.name);
+  players.forEach(p => { p.gamesPlayed = 0; p.wins = 0; p.points = 0; });
+
+  // Pull everyone off courts and out of the winners/losers queues back into one waiting line,
+  // preserving roster order, so nobody is lost from the queue.
+  courts.forEach(c => { c.teamA = []; c.teamB = []; c.teamAWon = null; });
+  waitingQueue = allNames.filter(n => !waitingQueue.includes(n) ? true : true); // keep computed below
+  waitingQueue = [...new Set([...waitingQueue, ...winnersQueue, ...losersQueue, ...allNames])].filter(n => findPlayer(n));
+  winnersQueue = [];
+  losersQueue = [];
+  nextPullFromWinners = true;
+  partnerHistory = {};
+  matchHistory = [];
+  confirmingReset = false;
+  renderAll();
+  saveState();
 }
 
 // ---- Drag & drop helpers ----
@@ -935,6 +1203,8 @@ function clearCourt(courtIdx) {
 // We support: reordering within the same queue, moving between waiting/winners/losers queues,
 // moving a queued player onto an empty court team slot, moving a court player back to a queue,
 // and swapping two court players (or a court player with a queue player).
+// If the dragged player has a locked partner sitting in the SAME queue, dropping the dragged
+// player onto a court automatically brings the locked partner along as the other half of that team.
 
 function getArrayForLocation(loc) {
   if (loc.source === 'waiting') return waitingQueue;
@@ -987,6 +1257,14 @@ function locationsEqual(a, b) {
   return a.index === b.index;
 }
 
+// Find the other open slot on the same team as `slotLoc`, if any.
+function otherSlotOnTeam(courtIdx, team, indexToExclude) {
+  for (let i = 0; i < 2; i++) {
+    if (i !== indexToExclude) return { source: 'court', courtIdx, team, index: i };
+  }
+  return null;
+}
+
 // Handle a drop: dragInfo describes the origin, targetLoc describes destination.
 function handleDrop(targetLoc) {
   if (!dragInfo) return;
@@ -1022,11 +1300,41 @@ function handleDrop(targetLoc) {
       if (teamAfter.length === 2) recordPartner(teamAfter[0], teamAfter[1]);
       const originTeamArr = dragInfo.source === 'court' ? courts[dragInfo.courtIdx][dragInfo.team] : null;
       if (originTeamArr && originTeamArr.length === 2) recordPartner(originTeamArr[0], originTeamArr[1]);
+
+      finishDropAndRender();
+      return;
     } else {
       // Target slot empty: just move dragged there
       if (team.length >= 2) { dragInfo = null; renderAll(); return; }
       removeAtLocation(dragInfo);
       insertAtLocation({ source: 'court', courtIdx: targetLoc.courtIdx, team: targetLoc.team, index: team.length }, draggedName);
+
+      // Auto-bring the locked partner along, if the dragged player has one and that
+      // partner is sitting in a queue (not already on a court), and there's an open
+      // slot to place them (same team's other slot, preferred, else the other team's open slot).
+      const partnerName = lockedPartnerOf(draggedName);
+      if (partnerName && !nameOnAnyCourt(partnerName)) {
+        const partnerLoc = findQueueLocationOf(partnerName);
+        if (partnerLoc) {
+          const teamAfterInsert = courts[targetLoc.courtIdx][targetLoc.team];
+          let destSlot = null;
+          if (teamAfterInsert.length < 2) {
+            destSlot = { source: 'court', courtIdx: targetLoc.courtIdx, team: targetLoc.team, index: teamAfterInsert.length };
+          } else {
+            const otherTeam = targetLoc.team === 'teamA' ? 'teamB' : 'teamA';
+            const otherArr = courts[targetLoc.courtIdx][otherTeam];
+            if (otherArr.length < 2) {
+              destSlot = { source: 'court', courtIdx: targetLoc.courtIdx, team: otherTeam, index: otherArr.length };
+            }
+          }
+          if (destSlot) {
+            removeAtLocation(partnerLoc);
+            insertAtLocation(destSlot, partnerName);
+            const finalTeam = courts[destSlot.courtIdx][destSlot.team];
+            if (finalTeam.length === 2) recordPartner(finalTeam[0], finalTeam[1]);
+          }
+        }
+      }
     }
   } else {
     // Target is a queue (waiting/winners/losers)
@@ -1044,8 +1352,24 @@ function handleDrop(targetLoc) {
     insertAtLocation({ source: targetLoc.source, index: insertIdx }, draggedName);
   }
 
+  finishDropAndRender();
+}
+
+function finishDropAndRender() {
   dragInfo = null;
   renderAll();
+  saveState();
+}
+
+// Locate a name within whichever queue (waiting/winners/losers) it currently sits in.
+function findQueueLocationOf(name) {
+  let idx = waitingQueue.indexOf(name);
+  if (idx >= 0) return { source: 'waiting', index: idx };
+  idx = winnersQueue.indexOf(name);
+  if (idx >= 0) return { source: 'winners', index: idx };
+  idx = losersQueue.indexOf(name);
+  if (idx >= 0) return { source: 'losers', index: idx };
+  return null;
 }
 
 // ==== Pointer-based drag & drop engine ====
@@ -1083,11 +1407,16 @@ function makeDraggable(el, loc, label, rowEl) {
     if (e.target.closest('button') || e.target.closest('input')) return;
     if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
 
+    // If this player has a locked partner also sitting in a queue, show the pair name so it's
+    // clear both will move together.
+    const partnerName = lockedPartnerOf(label);
+    const ghostLabel = (partnerName && findQueueLocationOf(partnerName)) ? `${label} + ${partnerName}` : label;
+
     pointerDragState = {
       startX: e.clientX,
       startY: e.clientY,
       loc,
-      label,
+      label: ghostLabel,
       rowEl: rowEl || el,
       active: false,
       pointerId: e.pointerId
@@ -1292,11 +1621,13 @@ function renderCourtSlotHtml(courtIdx, team, index, name, color) {
     return `<div class="team-slot" data-slot="${slotKey}" style="min-height:44px;border:1.5px dashed rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:12px;font-weight:700;">drop here</div>`;
   }
   const stat = findPlayer(name);
+  const partner = lockedPartnerOf(name);
   return `<div class="team-slot" data-slot="${slotKey}">
     <div class="player-row" data-player-row="${slotKey}">
       <div class="player-name">
         <span class="drag-handle">⠿</span>
         <span class="pname-text">${escapeHtml(name)}</span>
+        ${partner ? `<span class="wc" title="Locked partner">🔗</span>` : ''}
         ${stat ? `<span class="wc">${stat.wins}w</span>` : ''}
       </div>
       <button class="remove-x" data-rm="${courtIdx}|${team}|${index}">✕</button>
@@ -1322,32 +1653,38 @@ function renderQueue() {
   let html = `<div class="queue-list" id="queueList">`;
 
   waitingQueue.forEach((name, i) => {
+    const partner = lockedPartnerOf(name);
     html += `<div class="queue-chip" data-qsource="waiting" data-qindex="${i}">
       <span class="drag-handle">⠿</span>
       <span class="num">${i+1}</span>
-      <span class="name">${escapeHtml(name)}</span>
+      <span class="name">${escapeHtml(name)}${partner ? ' 🔗' : ''}</span>
       <button data-rmq="waiting|${i}">✕</button>
     </div>`;
   });
 
   winnersQueue.forEach((name, i) => {
+    const partner = lockedPartnerOf(name);
     html += `<div class="queue-chip tag-winner" data-qsource="winners" data-qindex="${i}">
       <span class="drag-handle">⠿</span>
       <span class="tagline">W</span>
-      <span class="name">${escapeHtml(name)}</span>
+      <span class="name">${escapeHtml(name)}${partner ? ' 🔗' : ''}</span>
       <button data-rmq="winners|${i}">✕</button>
     </div>`;
   });
   losersQueue.forEach((name, i) => {
+    const partner = lockedPartnerOf(name);
     html += `<div class="queue-chip tag-loser" data-qsource="losers" data-qindex="${i}">
       <span class="drag-handle">⠿</span>
       <span class="tagline">L</span>
-      <span class="name">${escapeHtml(name)}</span>
+      <span class="name">${escapeHtml(name)}${partner ? ' 🔗' : ''}</span>
       <button data-rmq="losers|${i}">✕</button>
     </div>`;
   });
 
   html += `</div>`;
+  if (total > 5) {
+    html += `<div class="queue-scroll-hint">← scroll to see everyone (${total} waiting) →</div>`;
+  }
   queueWrap.innerHTML = html;
 
   queueWrap.querySelectorAll('[data-rmq]').forEach(btn => {
@@ -1358,6 +1695,7 @@ function renderQueue() {
       if (which === 'winners') winnersQueue.splice(idx, 1);
       if (which === 'losers') losersQueue.splice(idx, 1);
       renderAll();
+      saveState();
     };
   });
 
@@ -1365,7 +1703,7 @@ function renderQueue() {
   queueWrap.querySelectorAll('.queue-chip').forEach(chip => {
     const loc = { source: chip.dataset.qsource, index: parseInt(chip.dataset.qindex) };
     const nameEl = chip.querySelector('.name');
-    const label = nameEl ? nameEl.textContent : '';
+    const label = nameEl ? nameEl.textContent.replace(' 🔗', '') : '';
     makeDraggable(chip, loc, label, chip);
   });
 }
@@ -1394,34 +1732,90 @@ function renderStandings() {
       <span class="pscore">${p.points || 0} pts</span>`;
     standingsWrap.appendChild(row);
   });
+
+  // Below the ranking, list recent finished matches with a way to correct a score.
+  if (matchHistory.length > 0) {
+    const historyHeader = document.createElement('div');
+    historyHeader.style.cssText = 'margin-top:14px;color:rgba(255,255,255,0.3);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;';
+    historyHeader.textContent = 'Recent matches';
+    standingsWrap.appendChild(historyHeader);
+
+    [...matchHistory].slice(-8).reverse().forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'standings-row';
+      const scoreText = (m.winnerScore !== null && m.loserScore !== null)
+        ? `${m.winnerScore}–${m.loserScore}`
+        : 'no score';
+      row.innerHTML = `<span class="pname" style="font-weight:600;">
+          <span style="color:#F2C94C;">${escapeHtml(m.names.winners.join(' & '))}</span>
+          <span style="opacity:.4;"> beat </span>
+          ${escapeHtml(m.names.losers.join(' & '))}
+        </span>
+        <span class="pstat">${scoreText}</span>
+        <button class="edit-score-btn" data-editmatch="${m.id}">✏️</button>`;
+      standingsWrap.appendChild(row);
+    });
+
+    standingsWrap.querySelectorAll('[data-editmatch]').forEach(btn => {
+      btn.onclick = () => openEditScore(parseInt(btn.dataset.editmatch));
+    });
+  }
 }
 
-// ---- Score entry modal ----
+// ---- Score entry modal (also reused for editing a past score) ----
 function renderScoreModal() {
-  if (!pendingScore) return '';
-  const { courtIdx, winnerTeam, loserTeam } = pendingScore;
-  const court = courts[courtIdx];
-  const winnerNames = court[winnerTeam].join(' & ');
-  const loserNames = court[loserTeam].join(' & ');
+  if (pendingScore) {
+    const { courtIdx, winnerTeam, loserTeam } = pendingScore;
+    const court = courts[courtIdx];
+    const winnerNames = court[winnerTeam].join(' & ');
+    const loserNames = court[loserTeam].join(' & ');
 
-  return `<div class="modal-overlay" id="scoreOverlay">
-    <div class="modal-card">
-      <div class="modal-title">Enter the score</div>
-      <div class="modal-sub">Court ${courtIdx + 1} · optional, you can skip</div>
-      <div class="score-row winner-row">
-        <span class="team-label">🏆 ${escapeHtml(winnerNames)}</span>
-        <input type="number" inputmode="numeric" class="score-input" id="winnerScoreInput" placeholder="0" />
+    return `<div class="modal-overlay" id="scoreOverlay">
+      <div class="modal-card">
+        <div class="modal-title">Enter the score</div>
+        <div class="modal-sub">Court ${courtIdx + 1} · optional, you can skip</div>
+        <div class="score-row winner-row">
+          <span class="team-label">🏆 ${escapeHtml(winnerNames)}</span>
+          <input type="number" inputmode="numeric" class="score-input" id="winnerScoreInput" placeholder="0" />
+        </div>
+        <div class="score-row">
+          <span class="team-label">${escapeHtml(loserNames)}</span>
+          <input type="number" inputmode="numeric" class="score-input" id="loserScoreInput" placeholder="0" />
+        </div>
+        <div class="modal-btn-row">
+          <button class="modal-btn skip" id="skipScoreBtn">Skip</button>
+          <button class="modal-btn confirm" id="confirmScoreBtn">Save score</button>
+        </div>
       </div>
-      <div class="score-row">
-        <span class="team-label">${escapeHtml(loserNames)}</span>
-        <input type="number" inputmode="numeric" class="score-input" id="loserScoreInput" placeholder="0" />
+    </div>`;
+  }
+
+  if (editingMatchId !== null) {
+    const match = findMatch(editingMatchId);
+    if (!match) return '';
+    const winnerNames = match.names.winners.join(' & ');
+    const loserNames = match.names.losers.join(' & ');
+    return `<div class="modal-overlay" id="scoreOverlay">
+      <div class="modal-card">
+        <div class="modal-title">Edit the score</div>
+        <div class="modal-sub">Correct a previously saved result</div>
+        <div class="score-row winner-row">
+          <span class="team-label">🏆 ${escapeHtml(winnerNames)}</span>
+          <input type="number" inputmode="numeric" class="score-input" id="winnerScoreInput" value="${match.winnerScore !== null ? match.winnerScore : ''}" placeholder="0" />
+        </div>
+        <div class="score-row">
+          <span class="team-label">${escapeHtml(loserNames)}</span>
+          <input type="number" inputmode="numeric" class="score-input" id="loserScoreInput" value="${match.loserScore !== null ? match.loserScore : ''}" placeholder="0" />
+        </div>
+        <div class="modal-btn-row">
+          <button class="modal-btn skip" id="skipScoreBtn">Cancel</button>
+          <button class="modal-btn confirm" id="confirmScoreBtn">Save correction</button>
+        </div>
       </div>
-      <div class="modal-btn-row">
-        <button class="modal-btn skip" id="skipScoreBtn">Skip</button>
-        <button class="modal-btn confirm" id="confirmScoreBtn">Save score</button>
-      </div>
-    </div>
-  </div>`;
+    </div>`;
+  }
+
+  return '';
 }
 
 function wireScoreModal() {
@@ -1429,13 +1823,45 @@ function wireScoreModal() {
   if (!overlay) return;
   const winnerInput = document.getElementById('winnerScoreInput');
   const loserInput = document.getElementById('loserScoreInput');
-  document.getElementById('skipScoreBtn').onclick = () => cancelScoreEntry();
-  document.getElementById('confirmScoreBtn').onclick = () => {
-    const w = winnerInput.value.trim() === '' ? null : parseInt(winnerInput.value, 10);
-    const l = loserInput.value.trim() === '' ? null : parseInt(loserInput.value, 10);
-    finalizeResult(Number.isFinite(w) ? w : null, Number.isFinite(l) ? l : null);
-  };
+
+  if (pendingScore) {
+    document.getElementById('skipScoreBtn').onclick = () => cancelScoreEntry();
+    document.getElementById('confirmScoreBtn').onclick = () => {
+      const w = winnerInput.value.trim() === '' ? null : parseInt(winnerInput.value, 10);
+      const l = loserInput.value.trim() === '' ? null : parseInt(loserInput.value, 10);
+      finalizeResult(Number.isFinite(w) ? w : null, Number.isFinite(l) ? l : null);
+    };
+  } else if (editingMatchId !== null) {
+    document.getElementById('skipScoreBtn').onclick = () => { editingMatchId = null; renderModal(); };
+    document.getElementById('confirmScoreBtn').onclick = () => {
+      const w = winnerInput.value.trim() === '' ? null : parseInt(winnerInput.value, 10);
+      const l = loserInput.value.trim() === '' ? null : parseInt(loserInput.value, 10);
+      saveEditedScore(editingMatchId, Number.isFinite(w) ? w : null, Number.isFinite(l) ? l : null);
+    };
+  }
   setTimeout(() => winnerInput && winnerInput.focus(), 50);
+}
+
+// ---- Confirm start-over modal ----
+function renderConfirmResetModal() {
+  if (!confirmingReset) return '';
+  return `<div class="modal-overlay" id="confirmResetOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Start over?</div>
+      <div class="confirm-text">This clears all scores, wins, and match history, and empties the courts. Everyone currently in the app stays in the queue so play can pick right back up.</div>
+      <div class="modal-btn-row">
+        <button class="modal-btn skip" id="cancelResetBtn">Cancel</button>
+        <button class="modal-btn danger" id="confirmResetBtn">Start over</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function wireConfirmResetModal() {
+  const overlay = document.getElementById('confirmResetOverlay');
+  if (!overlay) return;
+  document.getElementById('cancelResetBtn').onclick = () => { confirmingReset = false; renderModal(); };
+  document.getElementById('confirmResetBtn').onclick = () => performStartOver();
 }
 
 // ---- PIN modal ----
@@ -1487,6 +1913,7 @@ function handlePinComplete() {
       settingsPin = pinEntryBuffer;
       closePinModal();
       renderPinStatus();
+      saveState();
     } else {
       pinError = "PINs didn't match, try again.";
       pinEntryBuffer = '';
@@ -1541,6 +1968,7 @@ function wirePinModal() {
     closePinModal();
     setupPanel.classList.add('open');
     renderPinStatus();
+    saveState();
   };
 }
 
@@ -1548,7 +1976,10 @@ function renderModal() {
   if (pinModalMode) {
     modalRoot.innerHTML = renderPinModal();
     wirePinModal();
-  } else if (pendingScore) {
+  } else if (confirmingReset) {
+    modalRoot.innerHTML = renderConfirmResetModal();
+    wireConfirmResetModal();
+  } else if (pendingScore || editingMatchId !== null) {
     modalRoot.innerHTML = renderScoreModal();
     wireScoreModal();
   } else {
@@ -1581,7 +2012,14 @@ function renderAll() {
   renderModal();
 }
 
+// ---- Boot ----
+const hadSavedSession = loadState();
+updateOnlineStatus();
 renderAll();
+if (hadSavedSession) {
+  recoveredBanner.classList.add('show');
+}
+dismissRecoveredBtn.onclick = () => recoveredBanner.classList.remove('show');
 </script>
 
 </body>
