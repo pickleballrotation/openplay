@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Open Play Rotation</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  html, body { touch-action: pan-y; }
+  body {
+    margin: 0;
+    background: #0a0a0a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  .header {
+    padding: 24px 20px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .header h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+  }
+  .header p {
+    margin: 2px 0 0;
+    color: rgba(255,255,255,0.4);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .gear {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: white;
+    font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .setup {
+    padding: 16px 20px;
+    background: rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .setup.open { display: flex; }
+  .setup-section { display: flex; flex-direction: column; gap: 10px; }
+  .setup-label {
+    color: rgba(255,255,255,0.4);
+    font-size: 12px; font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .setup-hint {
+    color: rgba(255,255,255,0.3);
+    font-size: 11px;
+    font-weight: 500;
+    margin-top: -4px;
+  }
+  .court-count-row { display: flex; align-items: center; gap: 12px; }
+  .court-count-row span.ccl { color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 600; width: 70px; }
+  .count-btn {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    border: none;
+    font-weight: 800;
+    font-size: 16px;
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
+  }
+  .count-btn.active { background: #fff; color: #000; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input {
+    flex: 1;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 16px;
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .add-row input::placeholder { color: rgba(255,255,255,0.3); }
+  .add-btn {
+    width: 52px;
+    border-radius: 12px;
+    border: none;
+    background: #10b981;
+    color: white;
+    font-size: 24px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .lock-btn {
+    padding: 0 16px;
+    height: 48px;
+    border-radius: 12px;
+    border: none;
+    background: #6366f1;
+    color: white;
+    font-size: 14px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  .lock-btn:disabled { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.25); }
+  .roster-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .roster-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 8px 8px 12px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .roster-chip.selected { background: #6366f1; }
+  .roster-chip .stat { color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 700; }
+  .roster-chip.selected .stat { color: rgba(255,255,255,0.7); }
+  .roster-chip button {
+    background: none; border: none; color: rgba(255,255,255,0.4);
+    font-size: 14px; padding: 2px; line-height: 1;
+  }
+  .roster-chip input.rename-input {
+    background: rgba(0,0,0,0.3);
+    border: none;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    width: 90px;
+    border-radius: 6px;
+    padding: 3px 6px;
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .locked-pairs { display: flex; flex-direction: column; gap: 6px; }
+  .locked-pair-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(99,102,241,0.15);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .locked-pair-row button { background: none; border: none; color: rgba(255,255,255,0.5); font-size: 14px; }
+  .courts {
+    padding: 16px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  .court {
+    border-radius: 20px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 200px;
+    transition: outline 0.1s ease;
+    outline: 2px dashed transparent;
+    outline-offset: -2px;
+    position: relative;
+  }
+  .court.drag-over { outline-color: rgba(255,255,255,0.6); }
+  .court-top { display: flex; align-items: center; justify-content: space-between; }
+  .court-label { font-weight: 900; font-size: 18px; }
+  .court-tag {
+    font-size: 11px; font-weight: 800;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.25);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .clear-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,0.25);
+    color: white;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .empty-court {
+    flex: 1;
+    min-height: 140px;
+    border-radius: 14px;
+    border: 2px dashed rgba(255,255,255,0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: none;
+    color: rgba(255,255,255,0.5);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    padding: 12px;
+    transition: border-color 0.1s ease, background 0.1s ease;
+  }
+  .empty-court:disabled { opacity: 0.3; }
+  .empty-court.drag-over { border-color: #fff; background: rgba(255,255,255,0.08); }
+  .team { display: flex; flex-direction: column; gap: 6px; }
+  .team-slot {
+    border-radius: 10px;
+    transition: outline 0.1s ease;
+    outline: 2px dashed transparent;
+    outline-offset: 2px;
+  }
+  .team-slot.drag-over { outline-color: #fff; }
+  .player-row {
+    display: flex; align-items: center; gap: 6px;
+    touch-action: none;
+    position: relative;
+  }
+  .player-row.dragging { opacity: 0.35; }
+  .player-name {
+    flex: 1;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 17px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .player-name .drag-handle {
+    color: rgba(255,255,255,0.3);
+    font-size: 14px;
+    flex-shrink: 0;
+    touch-action: none;
+    padding: 4px;
+    margin: -4px;
+  }
+  .player-name .wc {
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.55);
+    background: rgba(0,0,0,0.25);
+    border-radius: 999px;
+    padding: 2px 7px;
+    flex-shrink: 0;
+  }
+  .player-name span.pname-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .remove-x {
+    background: none; border: none; color: rgba(255,255,255,0.35);
+    font-size: 18px; padding: 6px; line-height: 1;
+    touch-action: manipulation;
+  }
+  .vs { text-align: center; color: rgba(255,255,255,0.3); font-weight: 900; font-size: 13px; }
+  .result-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .win-btn {
+    padding: 13px 6px;
+    border-radius: 12px;
+    border: none;
+    font-weight: 800;
+    font-size: 14px;
+    color: #000;
+  }
+  .win-btn:active { transform: scale(0.96); }
+  .queue-section { padding: 8px 16px 16px; }
+  .queue-title {
+    display: flex; align-items: center; gap: 6px;
+    color: rgba(255,255,255,0.4);
+    font-size: 13px; font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .queue-empty {
+    padding: 24px; text-align: center;
+    background: rgba(255,255,255,0.05);
+    border-radius: 14px;
+    color: rgba(255,255,255,0.3);
+    font-size: 14px;
+  }
+  .queue-list {
+    display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;
+  }
+  .queue-chip {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 8px 8px 10px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 999px;
+    white-space: nowrap;
+    touch-action: none;
+    transition: outline 0.1s ease, opacity 0.1s ease;
+    outline: 2px dashed transparent;
+    outline-offset: 2px;
+    position: relative;
+  }
+  .queue-chip.dragging { opacity: 0.35; }
+  .queue-chip.drag-over { outline-color: #fff; }
+  .queue-chip.tag-winner { background: rgba(242,201,76,0.2); }
+  .queue-chip.tag-loser { background: rgba(255,255,255,0.06); }
+  .queue-chip .num { color: rgba(255,255,255,0.3); font-size: 12px; font-weight: 800; }
+  .queue-chip .name { font-weight: 600; font-size: 14px; }
+  .queue-chip .tagline { font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.4); text-transform: uppercase; }
+  .queue-chip .drag-handle { color: rgba(255,255,255,0.3); font-size: 13px; padding: 4px; margin: -4px; }
+  .queue-chip button { background: none; border: none; color: rgba(255,255,255,0.35); font-size: 15px; padding: 4px; touch-action: manipulation; }
+  .standings-section { padding: 0 16px 32px; }
+  .standings-list { display: flex; flex-direction: column; gap: 6px; }
+  .standings-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    font-size: 14px;
+  }
+  .standings-row .rank { width: 20px; color: rgba(255,255,255,0.3); font-weight: 800; font-size: 12px; }
+  .standings-row .pname { flex: 1; font-weight: 700; }
+  .standings-row .pstat { color: rgba(255,255,255,0.5); font-size: 12px; font-weight: 700; }
+  .standings-row .pwins { color: #F2C94C; font-weight: 800; font-size: 13px; }
+
+  /* Floating drag ghost element used by the pointer-based drag system */
+  .drag-ghost {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    padding: 10px 14px;
+    background: rgba(99,102,241,0.95);
+    color: #fff;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 15px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>OPEN PLAY</h1>
+    <p id="subtitle">winners stay · losers rotate</p>
+  </div>
+  <button class="gear" id="gearBtn">⚙</button>
+</div>
+
+<div class="setup" id="setupPanel">
+  <div class="setup-section">
+    <div class="setup-label">Courts</div>
+    <div class="court-count-row">
+      <div id="countBtns" style="display:flex; gap:8px;"></div>
+    </div>
+  </div>
+
+  <div class="setup-section">
+    <div class="setup-label">Add Players (max 18)</div>
+    <div class="add-row">
+      <input id="nameInput" placeholder="Add player name" />
+      <button class="add-btn" id="addBtn">+</button>
+    </div>
+    <div class="setup-hint">Tap a name to rename it. Names update everywhere automatically.</div>
+    <div class="roster-list" id="rosterList"></div>
+  </div>
+
+  <div class="setup-section">
+    <div class="setup-label">Lock Partners (tap 2 names above, then Lock)</div>
+    <div class="add-row">
+      <button class="lock-btn" id="lockBtn" disabled>Lock selected pair</button>
+    </div>
+    <div class="locked-pairs" id="lockedPairsWrap"></div>
+  </div>
+</div>
+
+<div class="courts" id="courtsWrap"></div>
+
+<div class="queue-section">
+  <div class="queue-title">👥 Up Next (<span id="queueCount">0</span>) — drag to reorder or drop onto a court</div>
+  <div id="queueWrap"></div>
+</div>
+
+<div class="standings-section">
+  <div class="queue-title">🏆 Standings</div>
+  <div class="standings-list" id="standingsWrap"></div>
+</div>
+
+<script>
+const COURT_COLORS = [
+  { bg: "#0F5132", accent: "#F2C94C" },
+  { bg: "#1B4965", accent: "#F2A65A" },
+  { bg: "#3D2B56", accent: "#8FD4A1" },
+  { bg: "#5C2A2A", accent: "#E8D5A6" },
+];
+
+const MAX_PLAYERS = 18;
+
+// ---- State ----
+// players: { name, gamesPlayed, wins }
+let players = [];          // full roster, in arrival order
+let waitingQueue = [];     // names: first-come queue for round 1 (players who haven't played yet, plus late arrivals)
+let winnersQueue = [];     // names waiting as "won last game", in order their win happened
+let losersQueue = [];      // names waiting as "lost last game", in order their loss happened
+let nextPullFromWinners = true; // alternation flag once round-robin phase begins
+let lockedPairs = [];      // [[nameA, nameB], ...]
+let selectedForLock = [];  // up to 2 names currently selected in setup UI
+let numCourts = 2;
+let courts = Array.from({length: numCourts}, () => ({ teamA: [], teamB: [], teamAWon: null }));
+// courts[i].teamA/teamB store player name strings. We also track partner-history to avoid repeat pairings.
+let partnerHistory = {};   // name -> Set of names they've partnered with
+let renamingName = null;   // name currently being edited in roster list
+
+// Drag state: describes where the dragged player is coming from
+// { source: 'waiting'|'winners'|'losers'|'court', index, courtIdx, team }
+let dragInfo = null;
+
+const setupPanel = document.getElementById('setupPanel');
+const gearBtn = document.getElementById('gearBtn');
+const countBtns = document.getElementById('countBtns');
+const nameInput = document.getElementById('nameInput');
+const addBtn = document.getElementById('addBtn');
+const rosterList = document.getElementById('rosterList');
+const lockBtn = document.getElementById('lockBtn');
+const lockedPairsWrap = document.getElementById('lockedPairsWrap');
+const courtsWrap = document.getElementById('courtsWrap');
+const queueWrap = document.getElementById('queueWrap');
+const queueCount = document.getElementById('queueCount');
+const standingsWrap = document.getElementById('standingsWrap');
+const subtitle = document.getElementById('subtitle');
+
+gearBtn.onclick = () => setupPanel.classList.toggle('open');
+
+function findPlayer(name) {
+  return players.find(p => p.name === name);
+}
+
+function recordPartner(a, b) {
+  if (!a || !b) return;
+  if (!partnerHistory[a]) partnerHistory[a] = new Set();
+  if (!partnerHistory[b]) partnerHistory[b] = new Set();
+  partnerHistory[a].add(b);
+  partnerHistory[b].add(a);
+}
+
+function havePartneredBefore(a, b) {
+  return partnerHistory[a] && partnerHistory[a].has(b);
+}
+
+function lockedPartnerOf(name) {
+  const pair = lockedPairs.find(p => p[0] === name || p[1] === name);
+  if (!pair) return null;
+  return pair[0] === name ? pair[1] : pair[0];
+}
+
+// ---- Setup: players & locking ----
+function renderCountBtns() {
+  countBtns.innerHTML = '';
+  [1,2,3,4].forEach(n => {
+    const b = document.createElement('button');
+    b.className = 'count-btn' + (numCourts === n ? ' active' : '');
+    b.textContent = n;
+    b.onclick = () => {
+      numCourts = n;
+      const next = Array.from({length: n}, (_, i) => courts[i] || {teamA: [], teamB: [], teamAWon: null});
+      courts = next;
+      renderAll();
+    };
+    countBtns.appendChild(b);
+  });
+}
+
+addBtn.onclick = addPlayer;
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer(); });
+
+function addPlayer() {
+  const name = nameInput.value.trim();
+  if (!name) return;
+  if (players.length >= MAX_PLAYERS) {
+    nameInput.value = '';
+    return;
+  }
+  if (findPlayer(name)) {
+    nameInput.value = '';
+    return;
+  }
+  players.push({ name, gamesPlayed: 0, wins: 0 });
+  waitingQueue.push(name);
+  nameInput.value = '';
+  renderAll();
+}
+
+function removePlayer(name) {
+  players = players.filter(p => p.name !== name);
+  waitingQueue = waitingQueue.filter(n => n !== name);
+  winnersQueue = winnersQueue.filter(n => n !== name);
+  losersQueue = losersQueue.filter(n => n !== name);
+  lockedPairs = lockedPairs.filter(pair => pair[0] !== name && pair[1] !== name);
+  selectedForLock = selectedForLock.filter(n => n !== name);
+  courts.forEach(c => {
+    c.teamA = c.teamA.filter(n => n !== name);
+    c.teamB = c.teamB.filter(n => n !== name);
+  });
+  delete partnerHistory[name];
+  Object.values(partnerHistory).forEach(set => set.delete(name));
+  renderAll();
+}
+
+// Rename a player everywhere: roster, all queues, courts, locked pairs, partner history.
+function renamePlayer(oldName, newNameRaw) {
+  const newName = newNameRaw.trim();
+  if (!newName || newName === oldName) return;
+  if (findPlayer(newName)) {
+    // name collision - just bail out quietly, keep old name
+    return;
+  }
+  const p = findPlayer(oldName);
+  if (!p) return;
+  p.name = newName;
+
+  const swap = (arr) => arr.map(n => n === oldName ? newName : n);
+  waitingQueue = swap(waitingQueue);
+  winnersQueue = swap(winnersQueue);
+  losersQueue = swap(losersQueue);
+  courts.forEach(c => {
+    c.teamA = swap(c.teamA);
+    c.teamB = swap(c.teamB);
+  });
+  lockedPairs = lockedPairs.map(pair => pair.map(n => n === oldName ? newName : n));
+  selectedForLock = swap(selectedForLock);
+
+  if (partnerHistory[oldName]) {
+    partnerHistory[newName] = partnerHistory[oldName];
+    delete partnerHistory[oldName];
+  }
+  Object.values(partnerHistory).forEach(set => {
+    if (set.has(oldName)) { set.delete(oldName); set.add(newName); }
+  });
+}
+
+function toggleSelectForLock(name) {
+  if (lockedPartnerOf(name)) return; // already locked, ignore
+  const idx = selectedForLock.indexOf(name);
+  if (idx >= 0) {
+    selectedForLock.splice(idx, 1);
+  } else if (selectedForLock.length < 2) {
+    selectedForLock.push(name);
+  }
+  renderRoster();
+}
+
+lockBtn.onclick = () => {
+  if (selectedForLock.length !== 2) return;
+  lockedPairs.push([selectedForLock[0], selectedForLock[1]]);
+  selectedForLock = [];
+  renderAll();
+};
+
+function unlockPair(idx) {
+  lockedPairs.splice(idx, 1);
+  renderAll();
+}
+
+function renderRoster() {
+  rosterList.innerHTML = '';
+  players.forEach(p => {
+    const chip = document.createElement('div');
+    const isSelected = selectedForLock.includes(p.name);
+    chip.className = 'roster-chip' + (isSelected ? ' selected' : '');
+    const locked = lockedPartnerOf(p.name);
+
+    if (renamingName === p.name) {
+      chip.innerHTML = `<input class="rename-input" type="text" value="${escapeAttr(p.name)}" data-renaming="${escapeAttr(p.name)}" />
+        <span class="stat">${p.gamesPlayed}g · ${p.wins}w</span>
+        <button data-rmplayer="${escapeAttr(p.name)}">✕</button>`;
+      rosterList.appendChild(chip);
+      const input = chip.querySelector('input.rename-input');
+      input.focus();
+      input.select();
+      const commit = () => {
+        renamePlayer(p.name, input.value);
+        renamingName = null;
+        renderAll();
+      };
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') { renamingName = null; renderAll(); }
+      });
+      input.addEventListener('blur', commit);
+      return;
+    }
+
+    chip.innerHTML = `<span>${escapeHtml(p.name)}${locked ? ' 🔗' : ''}</span>
+      <span class="stat">${p.gamesPlayed}g · ${p.wins}w</span>
+      <button data-rmplayer="${escapeAttr(p.name)}">✕</button>`;
+    chip.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      // single click toggles lock-selection; double click (or click-while-selected-elsewhere) can rename
+      toggleSelectForLock(p.name);
+    });
+    chip.addEventListener('dblclick', (e) => {
+      if (e.target.closest('button')) return;
+      renamingName = p.name;
+      selectedForLock = selectedForLock.filter(n => n !== p.name);
+      renderRoster();
+    });
+    rosterList.appendChild(chip);
+  });
+  rosterList.querySelectorAll('[data-rmplayer]').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); removePlayer(btn.dataset.rmplayer); };
+  });
+  lockBtn.disabled = selectedForLock.length !== 2;
+
+  lockedPairsWrap.innerHTML = '';
+  lockedPairs.forEach((pair, i) => {
+    const row = document.createElement('div');
+    row.className = 'locked-pair-row';
+    row.innerHTML = `<span>🔗 ${escapeHtml(pair[0])} + ${escapeHtml(pair[1])}</span>
+      <button data-unlock="${i}">Unlock</button>`;
+    lockedPairsWrap.appendChild(row);
+  });
+  lockedPairsWrap.querySelectorAll('[data-unlock]').forEach(btn => {
+    btn.onclick = () => unlockPair(parseInt(btn.dataset.unlock));
+  });
+}
+
+// ---- Match forming logic ----
+
+function pickTeamFromPool(pool) {
+  if (pool.length === 0) return null;
+  const first = pool[0];
+  const lockedPartner = lockedPartnerOf(first);
+
+  if (lockedPartner) {
+    if (pool.includes(lockedPartner)) {
+      return [first, lockedPartner];
+    }
+    return null;
+  }
+
+  for (let i = 1; i < pool.length; i++) {
+    const candidate = pool[i];
+    if (lockedPartnerOf(candidate)) continue;
+    if (!havePartneredBefore(first, candidate)) {
+      return [first, candidate];
+    }
+  }
+  for (let i = 1; i < pool.length; i++) {
+    const candidate = pool[i];
+    if (lockedPartnerOf(candidate)) continue;
+    return [first, candidate];
+  }
+  return null;
+}
+
+function tryFormMatchFromWaiting() {
+  if (waitingQueue.length < 4) return null;
+  let pool = [...waitingQueue];
+  const teamA = pickTeamFromPool(pool);
+  if (!teamA) return null;
+  pool = pool.filter(n => !teamA.includes(n));
+  const teamB = pickTeamFromPool(pool);
+  if (!teamB) return null;
+  const used = [...teamA, ...teamB];
+  waitingQueue = waitingQueue.filter(n => !used.includes(n));
+  return { teamA, teamB };
+}
+
+function tryFormMatchFromResults() {
+  const allPlayed = players.length > 0 && players.every(p => p.gamesPlayed > 0);
+  if (!allPlayed) return null;
+
+  const tryPool = (poolArr) => {
+    if (poolArr.length < 4) return null;
+    let pool = [...poolArr];
+    const teamA = pickTeamFromPool(pool);
+    if (!teamA) return null;
+    pool = pool.filter(n => !teamA.includes(n));
+    const teamB = pickTeamFromPool(pool);
+    if (!teamB) return null;
+    return { teamA, teamB, used: [...teamA, ...teamB] };
+  };
+
+  const order = nextPullFromWinners ? ['winners', 'losers'] : ['losers', 'winners'];
+  for (const which of order) {
+    const poolArr = which === 'winners' ? winnersQueue : losersQueue;
+    const result = tryPool(poolArr);
+    if (result) {
+      if (which === 'winners') {
+        winnersQueue = winnersQueue.filter(n => !result.used.includes(n));
+      } else {
+        losersQueue = losersQueue.filter(n => !result.used.includes(n));
+      }
+      nextPullFromWinners = !nextPullFromWinners;
+      return { teamA: result.teamA, teamB: result.teamB };
+    }
+  }
+  return null;
+}
+
+function fillCourtFromQueue(courtIdx) {
+  let match = tryFormMatchFromWaiting();
+  if (!match) match = tryFormMatchFromResults();
+  if (!match) return;
+
+  courts[courtIdx] = { teamA: match.teamA, teamB: match.teamB, teamAWon: null };
+  recordPartner(match.teamA[0], match.teamA[1]);
+  recordPartner(match.teamB[0], match.teamB[1]);
+  match.teamA.concat(match.teamB).forEach(name => {
+    const p = findPlayer(name);
+    if (p) p.gamesPlayed += 1;
+  });
+  renderAll();
+}
+
+function removePlayerFromCourt(courtIdx, team, playerIdx) {
+  const name = courts[courtIdx][team][playerIdx];
+  courts[courtIdx][team].splice(playerIdx, 1);
+  if (name) {
+    waitingQueue.unshift(name); // bump back to front of line since their game was interrupted
+    const p = findPlayer(name);
+    if (p) p.gamesPlayed = Math.max(0, p.gamesPlayed - 1);
+  }
+  renderAll();
+}
+
+function reportResult(courtIdx, winnerTeam) {
+  const court = courts[courtIdx];
+  const loserTeam = winnerTeam === 'teamA' ? 'teamB' : 'teamA';
+  const winners = court[winnerTeam];
+  const losers = court[loserTeam];
+  if (winners.length < 2 || losers.length < 2) return;
+
+  winners.forEach(name => {
+    const p = findPlayer(name);
+    if (p) p.wins += 1;
+  });
+
+  winnersQueue = [...winnersQueue, ...winners];
+  losersQueue = [...losersQueue, ...losers];
+
+  courts[courtIdx] = { teamA: [], teamB: [], teamAWon: null };
+  renderAll();
+}
+
+function clearCourt(courtIdx) {
+  const { teamA, teamB } = courts[courtIdx];
+  const names = [...teamA, ...teamB];
+  names.forEach(name => {
+    waitingQueue.push(name);
+    const p = findPlayer(name);
+    if (p) p.gamesPlayed = Math.max(0, p.gamesPlayed - 1);
+  });
+  courts[courtIdx] = { teamA: [], teamB: [], teamAWon: null };
+  renderAll();
+}
+
+// ---- Drag & drop helpers ----
+// Every "slot" a player can occupy has a location descriptor:
+//   { source: 'waiting', index }
+//   { source: 'winners', index }
+//   { source: 'losers', index }
+//   { source: 'court', courtIdx, team, index }
+// We support: reordering within the same queue, moving between waiting/winners/losers queues,
+// moving a queued player onto an empty court team slot, moving a court player back to a queue,
+// and swapping two court players (or a court player with a queue player).
+
+function getArrayForLocation(loc) {
+  if (loc.source === 'waiting') return waitingQueue;
+  if (loc.source === 'winners') return winnersQueue;
+  if (loc.source === 'losers') return losersQueue;
+  if (loc.source === 'court') return courts[loc.courtIdx][loc.team];
+  return null;
+}
+
+function getNameAt(loc) {
+  const arr = getArrayForLocation(loc);
+  if (!arr) return null;
+  return arr[loc.index];
+}
+
+function removeAtLocation(loc) {
+  const arr = getArrayForLocation(loc);
+  if (!arr) return null;
+  const [name] = arr.splice(loc.index, 1);
+  if (loc.source === 'court' && name) {
+    const p = findPlayer(name);
+    if (p) p.gamesPlayed = Math.max(0, p.gamesPlayed - 1);
+  }
+  return name;
+}
+
+function insertAtLocation(loc, name) {
+  if (loc.source === 'court') {
+    const team = courts[loc.courtIdx][loc.team];
+    if (team.length >= 2) return false; // slot full, caller should have handled swap
+    const idx = (loc.index === null || loc.index === undefined) ? team.length : loc.index;
+    team.splice(idx, 0, name);
+    const p = findPlayer(name);
+    if (p) p.gamesPlayed += 1;
+    // record partnership if the team is now complete
+    if (team.length === 2) recordPartner(team[0], team[1]);
+    return true;
+  }
+  const arr = getArrayForLocation(loc);
+  if (!arr) return false;
+  const idx = (loc.index === null || loc.index === undefined) ? arr.length : loc.index;
+  arr.splice(idx, 0, name);
+  return true;
+}
+
+function locationsEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.source !== b.source) return false;
+  if (a.source === 'court') return a.courtIdx === b.courtIdx && a.team === b.team && a.index === b.index;
+  return a.index === b.index;
+}
+
+// Handle a drop: dragInfo describes the origin, targetLoc describes destination.
+function handleDrop(targetLoc) {
+  if (!dragInfo) return;
+  if (locationsEqual(dragInfo, targetLoc)) { dragInfo = null; renderAll(); return; }
+
+  const draggedName = getNameAt(dragInfo);
+  if (!draggedName) { dragInfo = null; renderAll(); return; }
+
+  // Case: target is a court slot
+  if (targetLoc.source === 'court') {
+    const team = courts[targetLoc.courtIdx][targetLoc.team];
+    const occupantName = team[targetLoc.index] !== undefined ? team[targetLoc.index] : null;
+
+    if (occupantName) {
+      // Swap: remove dragged from origin, remove occupant from target, place each in the other's spot
+      removeAtLocation(dragInfo);
+      // recompute occupant index after potential shift (only matters if same array, but court arrays are separate from queues so fine)
+      const teamAfter = courts[targetLoc.courtIdx][targetLoc.team];
+      const occIdx = teamAfter.indexOf(occupantName);
+      teamAfter.splice(occIdx, 1);
+      const pOcc = findPlayer(occupantName);
+      if (pOcc) pOcc.gamesPlayed = Math.max(0, pOcc.gamesPlayed - 1);
+
+      // place dragged into target slot
+      teamAfter.splice(Math.min(targetLoc.index, teamAfter.length), 0, draggedName);
+      const pDragged = findPlayer(draggedName);
+      if (pDragged) pDragged.gamesPlayed += 1;
+
+      // place occupant into dragged's original slot
+      insertAtLocation(dragInfo, occupantName);
+
+      // if either team is now complete, record partnership
+      if (teamAfter.length === 2) recordPartner(teamAfter[0], teamAfter[1]);
+      const originTeamArr = dragInfo.source === 'court' ? courts[dragInfo.courtIdx][dragInfo.team] : null;
+      if (originTeamArr && originTeamArr.length === 2) recordPartner(originTeamArr[0], originTeamArr[1]);
+    } else {
+      // Target slot empty: just move dragged there
+      if (team.length >= 2) { dragInfo = null; renderAll(); return; }
+      removeAtLocation(dragInfo);
+      insertAtLocation({ source: 'court', courtIdx: targetLoc.courtIdx, team: targetLoc.team, index: team.length }, draggedName);
+    }
+  } else {
+    // Target is a queue (waiting/winners/losers)
+    const targetArr = getArrayForLocation(targetLoc);
+    const isSameArray = dragInfo.source === targetLoc.source;
+
+    removeAtLocation(dragInfo);
+
+    let insertIdx = targetLoc.index;
+    // If reordering within the same array and dragged item was before the target, index shifts down by 1
+    if (isSameArray && dragInfo.index < targetLoc.index) {
+      insertIdx = targetLoc.index - 1;
+    }
+    if (insertIdx === null || insertIdx === undefined) insertIdx = targetArr.length;
+    insertAtLocation({ source: targetLoc.source, index: insertIdx }, draggedName);
+  }
+
+  dragInfo = null;
+  renderAll();
+}
+
+// ==== Pointer-based drag & drop engine ====
+// Native HTML5 drag-and-drop (draggable/dragstart/dragover/drop) does not fire from touch
+// gestures on iOS Safari or most mobile browsers, which is why dragging silently did nothing
+// on a phone. This engine uses Pointer Events instead, which unify mouse, touch, and pen,
+// and works the same way everywhere. It drives the exact same dragInfo / handleDrop logic above.
+
+const DRAG_THRESHOLD = 6; // px of movement before a press becomes a drag (lets taps/clicks still work)
+
+let pointerDragState = null; // { startX, startY, loc, el, ghostEl, active, pointerId }
+let ghostEl = null;
+
+function makeGhost(label, x, y) {
+  const g = document.createElement('div');
+  g.className = 'drag-ghost';
+  g.textContent = label;
+  g.style.left = x + 'px';
+  g.style.top = y + 'px';
+  document.body.appendChild(g);
+  return g;
+}
+
+function clearDragVisualState() {
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+}
+
+// Attach a draggable source. `el` is the element the user presses on to begin dragging,
+// `loc` is its location descriptor, `label` is the text shown in the floating ghost,
+// and `rowEl` is the element that should visually dim while dragging (may equal el).
+function makeDraggable(el, loc, label, rowEl) {
+  el.addEventListener('pointerdown', (e) => {
+    // Ignore drags initiated on buttons/inputs so taps like ✕ or rename still work
+    if (e.target.closest('button') || e.target.closest('input')) return;
+    if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
+
+    pointerDragState = {
+      startX: e.clientX,
+      startY: e.clientY,
+      loc,
+      label,
+      rowEl: rowEl || el,
+      active: false,
+      pointerId: e.pointerId
+    };
+  }, { passive: true });
+}
+
+function findDropTargetAt(x, y) {
+  // Temporarily hide the ghost so elementFromPoint sees what's underneath it
+  if (ghostEl) ghostEl.style.display = 'none';
+  const el = document.elementFromPoint(x, y);
+  if (ghostEl) ghostEl.style.display = '';
+  if (!el) return null;
+
+  const slot = el.closest('[data-slot]');
+  if (slot) {
+    const [courtIdx, team, index] = slot.dataset.slot.split('|');
+    return { targetLoc: { source: 'court', courtIdx: parseInt(courtIdx), team, index: parseInt(index) }, el: slot };
+  }
+  const fillBtn = el.closest('[data-fill]');
+  if (fillBtn) {
+    const idx = parseInt(fillBtn.dataset.fill);
+    const c = courts[idx];
+    let team = null, index = null;
+    if (c.teamA.length < 2) { team = 'teamA'; index = c.teamA.length; }
+    else if (c.teamB.length < 2) { team = 'teamB'; index = c.teamB.length; }
+    if (team) return { targetLoc: { source: 'court', courtIdx: idx, team, index }, el: fillBtn };
+    return null;
+  }
+  const courtEl = el.closest('.court');
+  if (courtEl) {
+    const idx = Array.from(courtsWrap.children).indexOf(courtEl);
+    if (idx >= 0) {
+      const c = courts[idx];
+      let team = null, index = null;
+      if (c.teamA.length < 2) { team = 'teamA'; index = c.teamA.length; }
+      else if (c.teamB.length < 2) { team = 'teamB'; index = c.teamB.length; }
+      if (team) return { targetLoc: { source: 'court', courtIdx: idx, team, index }, el: courtEl };
+    }
+    return null;
+  }
+  const chip = el.closest('.queue-chip');
+  if (chip) {
+    return { targetLoc: { source: chip.dataset.qsource, index: parseInt(chip.dataset.qindex) }, el: chip };
+  }
+  const queueListEl = el.closest('#queueList') || el.closest('#queueWrap');
+  if (queueListEl) {
+    return { targetLoc: { source: 'waiting', index: waitingQueue.length }, el: queueListEl };
+  }
+  return null;
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!pointerDragState) return;
+  const dx = e.clientX - pointerDragState.startX;
+  const dy = e.clientY - pointerDragState.startY;
+
+  if (!pointerDragState.active) {
+    if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+    // Begin the actual drag
+    pointerDragState.active = true;
+    dragInfo = pointerDragState.loc;
+    pointerDragState.rowEl.classList.add('dragging');
+    ghostEl = makeGhost(pointerDragState.label, e.clientX, e.clientY);
+    try { pointerDragState.rowEl.setPointerCapture && pointerDragState.rowEl.setPointerCapture(pointerDragState.pointerId); } catch (err) {}
+  }
+
+  e.preventDefault();
+  if (ghostEl) {
+    ghostEl.style.left = e.clientX + 'px';
+    ghostEl.style.top = e.clientY + 'px';
+  }
+
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  const hit = findDropTargetAt(e.clientX, e.clientY);
+  if (hit && hit.el) hit.el.classList.add('drag-over');
+}, { passive: false });
+
+document.addEventListener('pointerup', (e) => {
+  if (!pointerDragState) return;
+  const wasActive = pointerDragState.active;
+  const rowEl = pointerDragState.rowEl;
+
+  if (wasActive) {
+    const hit = findDropTargetAt(e.clientX, e.clientY);
+    if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+    clearDragVisualState();
+    if (hit) {
+      handleDrop(hit.targetLoc);
+    } else {
+      dragInfo = null;
+      renderAll();
+    }
+  }
+
+  if (rowEl) rowEl.classList.remove('dragging');
+  pointerDragState = null;
+}, { passive: true });
+
+document.addEventListener('pointercancel', () => {
+  if (!pointerDragState) return;
+  if (ghostEl) { ghostEl.remove(); ghostEl = null; }
+  clearDragVisualState();
+  dragInfo = null;
+  pointerDragState = null;
+}, { passive: true });
+
+// ---- Rendering ----
+
+function renderCourts() {
+  courtsWrap.innerHTML = '';
+  courtsWrap.style.gridTemplateColumns = numCourts > 1 ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr';
+
+  const allPlayed = players.length > 0 && players.every(p => p.gamesPlayed > 0);
+  const canFillFromWaiting = waitingQueue.length >= 4;
+  const canFillFromResults = allPlayed && (winnersQueue.length >= 4 || losersQueue.length >= 4);
+
+  courts.forEach((court, idx) => {
+    const color = COURT_COLORS[idx % COURT_COLORS.length];
+    const isEmpty = court.teamA.length === 0 && court.teamB.length === 0;
+    const isFull = court.teamA.length === 2 && court.teamB.length === 2;
+
+    const div = document.createElement('div');
+    div.className = 'court';
+    div.style.background = color.bg;
+
+    let html = `<div class="court-top">
+      <span class="court-label" style="color:${color.accent}">COURT ${idx+1}</span>
+      ${!isEmpty ? `<button class="clear-btn" data-clear="${idx}">↺</button>` : ''}
+    </div>`;
+
+    if (isEmpty) {
+      const canFill = canFillFromWaiting || canFillFromResults;
+      let msg;
+      if (canFillFromWaiting) msg = 'Tap to fill next 4 in line';
+      else if (canFillFromResults) msg = 'Tap to fill (winners/losers round)';
+      else msg = `Waiting on more players (need 4)`;
+      html += `<button class="empty-court" data-fill="${idx}" ${canFill ? '' : 'disabled'}>
+        <span style="font-size:24px;">👥</span>
+        <span>${msg}</span>
+        <span style="font-size:11px;opacity:0.6;">or drag players here</span>
+      </button>`;
+    } else {
+      html += `<div class="team" data-team-wrap="${idx}|teamA">`;
+      for (let i = 0; i < 2; i++) {
+        const p = court.teamA[i];
+        html += renderCourtSlotHtml(idx, 'teamA', i, p, color);
+      }
+      html += `</div><div class="vs">VS</div><div class="team" data-team-wrap="${idx}|teamB">`;
+      for (let i = 0; i < 2; i++) {
+        const p = court.teamB[i];
+        html += renderCourtSlotHtml(idx, 'teamB', i, p, color);
+      }
+      html += `</div>`;
+
+      if (isFull) {
+        html += `<div class="result-row">
+          <button class="win-btn" style="background:${color.accent}" data-win="${idx}|teamA">🏆 Team 1 won</button>
+          <button class="win-btn" style="background:${color.accent}" data-win="${idx}|teamB">🏆 Team 2 won</button>
+        </div>`;
+      }
+    }
+
+    div.innerHTML = html;
+    courtsWrap.appendChild(div);
+  });
+
+  courtsWrap.querySelectorAll('[data-fill]').forEach(btn => {
+    btn.onclick = () => fillCourtFromQueue(parseInt(btn.dataset.fill));
+  });
+  courtsWrap.querySelectorAll('[data-clear]').forEach(btn => {
+    btn.onclick = () => clearCourt(parseInt(btn.dataset.clear));
+  });
+  courtsWrap.querySelectorAll('[data-rm]').forEach(btn => {
+    btn.onclick = () => {
+      const [courtIdx, team, playerIdx] = btn.dataset.rm.split('|');
+      removePlayerFromCourt(parseInt(courtIdx), team, parseInt(playerIdx));
+    };
+  });
+  courtsWrap.querySelectorAll('[data-win]').forEach(btn => {
+    btn.onclick = () => {
+      const [courtIdx, team] = btn.dataset.win.split('|');
+      reportResult(parseInt(courtIdx), team);
+    };
+  });
+
+  // Player-row pointer-drag handlers (works for mouse, touch, and pen)
+  courtsWrap.querySelectorAll('[data-player-row]').forEach(row => {
+    const [courtIdx, team, index] = row.dataset.playerRow.split('|');
+    const loc = { source: 'court', courtIdx: parseInt(courtIdx), team, index: parseInt(index) };
+    const name = courts[loc.courtIdx][loc.team][loc.index];
+    makeDraggable(row, loc, name || '', row);
+  });
+}
+
+function renderCourtSlotHtml(courtIdx, team, index, name, color) {
+  const slotKey = `${courtIdx}|${team}|${index}`;
+  if (!name) {
+    return `<div class="team-slot" data-slot="${slotKey}" style="min-height:44px;border:1.5px dashed rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.3);font-size:12px;font-weight:700;">drop here</div>`;
+  }
+  const stat = findPlayer(name);
+  return `<div class="team-slot" data-slot="${slotKey}">
+    <div class="player-row" data-player-row="${slotKey}">
+      <div class="player-name">
+        <span class="drag-handle">⠿</span>
+        <span class="pname-text">${escapeHtml(name)}</span>
+        ${stat ? `<span class="wc">${stat.wins}w</span>` : ''}
+      </div>
+      <button class="remove-x" data-rm="${courtIdx}|${team}|${index}">✕</button>
+    </div>
+  </div>`;
+}
+
+function renderQueue() {
+  const allPlayed = players.length > 0 && players.every(p => p.gamesPlayed > 0);
+  const total = waitingQueue.length + (allPlayed ? winnersQueue.length + losersQueue.length : 0);
+  queueCount.textContent = total;
+
+  if (total === 0) {
+    queueWrap.innerHTML = `<div class="queue-empty">No one waiting. Add players above.</div>`;
+    subtitle.textContent = 'winners stay · losers rotate';
+    return;
+  }
+
+  let html = `<div class="queue-list" id="queueList">`;
+
+  waitingQueue.forEach((name, i) => {
+    html += `<div class="queue-chip" data-qsource="waiting" data-qindex="${i}">
+      <span class="drag-handle">⠿</span>
+      <span class="num">${i+1}</span>
+      <span class="name">${escapeHtml(name)}</span>
+      <button data-rmq="waiting|${i}">✕</button>
+    </div>`;
+  });
+
+  if (allPlayed) {
+    winnersQueue.forEach((name, i) => {
+      html += `<div class="queue-chip tag-winner" data-qsource="winners" data-qindex="${i}">
+        <span class="drag-handle">⠿</span>
+        <span class="tagline">W</span>
+        <span class="name">${escapeHtml(name)}</span>
+        <button data-rmq="winners|${i}">✕</button>
+      </div>`;
+    });
+    losersQueue.forEach((name, i) => {
+      html += `<div class="queue-chip tag-loser" data-qsource="losers" data-qindex="${i}">
+        <span class="drag-handle">⠿</span>
+        <span class="tagline">L</span>
+        <span class="name">${escapeHtml(name)}</span>
+        <button data-rmq="losers|${i}">✕</button>
+      </div>`;
+    });
+  }
+
+  html += `</div>`;
+  queueWrap.innerHTML = html;
+  subtitle.textContent = allPlayed
+    ? 'round robin: winners vs winners, losers vs losers'
+    : `first-come rotation · ${players.filter(p => p.gamesPlayed === 0).length} yet to play`;
+
+  queueWrap.querySelectorAll('[data-rmq]').forEach(btn => {
+    btn.onclick = () => {
+      const [which, i] = btn.dataset.rmq.split('|');
+      const idx = parseInt(i);
+      if (which === 'waiting') waitingQueue.splice(idx, 1);
+      if (which === 'winners') winnersQueue.splice(idx, 1);
+      if (which === 'losers') losersQueue.splice(idx, 1);
+      renderAll();
+    };
+  });
+
+  // Pointer-drag handlers for queue chips: reordering + moving between waiting/winners/losers
+  queueWrap.querySelectorAll('.queue-chip').forEach(chip => {
+    const loc = { source: chip.dataset.qsource, index: parseInt(chip.dataset.qindex) };
+    const nameEl = chip.querySelector('.name');
+    const label = nameEl ? nameEl.textContent : '';
+    makeDraggable(chip, loc, label, chip);
+  });
+}
+
+function renderStandings() {
+  if (players.length === 0) {
+    standingsWrap.innerHTML = `<div class="queue-empty">No players yet.</div>`;
+    return;
+  }
+  const sorted = [...players].sort((a, b) => b.wins - a.wins || b.gamesPlayed - a.gamesPlayed);
+  standingsWrap.innerHTML = '';
+  sorted.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'standings-row';
+    const partner = lockedPartnerOf(p.name);
+    row.innerHTML = `<span class="rank">${i+1}</span>
+      <span class="pname">${escapeHtml(p.name)}${partner ? ` <span style="opacity:.5;font-weight:500;">🔗${escapeHtml(partner)}</span>` : ''}</span>
+      <span class="pstat">${p.gamesPlayed} played</span>
+      <span class="pwins">${p.wins}W</span>`;
+    standingsWrap.appendChild(row);
+  });
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function escapeAttr(str) {
+  return escapeHtml(str).replace(/"/g, '&quot;');
+}
+
+function renderAll() {
+  renderCountBtns();
+  renderRoster();
+  renderCourts();
+  renderQueue();
+  renderStandings();
+}
+
+renderAll();
+</script>
+
+</body>
+</html>
+
