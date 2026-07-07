@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Open Play Rotation</title>
+<title>Club App</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
   html, body { touch-action: pan-y; }
@@ -338,6 +338,7 @@
   .standings-row .pname { flex: 1; font-weight: 700; }
   .standings-row .pstat { color: rgba(255,255,255,0.5); font-size: 12px; font-weight: 700; }
   .standings-row .pwins { color: #F2C94C; font-weight: 800; font-size: 13px; }
+  .standings-row .pscore { color: #6ee7b7; font-weight: 800; font-size: 13px; min-width: 62px; text-align: right; }
 
   /* Floating drag ghost element used by the pointer-based drag system */
   .drag-ghost {
@@ -354,14 +355,91 @@
     transform: translate(-50%, -50%);
     white-space: nowrap;
   }
+
+  /* Score entry modal, shown right after a winner is picked */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+  }
+  .modal-card {
+    background: #161616;
+    border-radius: 20px;
+    padding: 22px;
+    width: 100%;
+    max-width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .modal-title { font-size: 17px; font-weight: 900; }
+  .modal-sub { font-size: 13px; color: rgba(255,255,255,0.45); font-weight: 600; margin-top: -8px; }
+  .score-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .score-row .team-label { font-size: 14px; font-weight: 800; flex: 1; }
+  .score-row.winner-row .team-label { color: #F2C94C; }
+  .score-input {
+    width: 74px;
+    padding: 12px 0;
+    text-align: center;
+    border-radius: 12px;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 800;
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .modal-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .modal-btn {
+    padding: 13px 6px;
+    border-radius: 12px;
+    border: none;
+    font-weight: 800;
+    font-size: 14px;
+  }
+  .modal-btn.skip { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+  .modal-btn.confirm { background: #10b981; color: #000; }
+
+  /* PIN lock modal for settings */
+  .pin-dots { display: flex; gap: 12px; justify-content: center; margin: 6px 0; }
+  .pin-dot {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3);
+    background: transparent;
+  }
+  .pin-dot.filled { background: #6366f1; border-color: #6366f1; }
+  .pin-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .pin-key {
+    padding: 16px 0;
+    border-radius: 14px;
+    border: none;
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .pin-key:active { background: rgba(255,255,255,0.18); }
+  .pin-key.wide { grid-column: span 1; font-size: 14px; font-weight: 800; color: rgba(255,255,255,0.5); }
+  .pin-error { color: #f87171; font-size: 12px; font-weight: 700; text-align: center; min-height: 16px; }
+  .pin-forgot { background: none; border: none; color: rgba(255,255,255,0.35); font-size: 12px; font-weight: 700; text-align: center; padding: 4px; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <div>
-    <h1>OPEN PLAY</h1>
-    <p id="subtitle">winners stay · losers rotate</p>
+    <h1>Club App</h1>
+    <p id="subtitle">0 players entered</p>
   </div>
   <button class="gear" id="gearBtn">⚙</button>
 </div>
@@ -375,7 +453,7 @@
   </div>
 
   <div class="setup-section">
-    <div class="setup-label">Add Players (max 18)</div>
+    <div class="setup-label">Add Players</div>
     <div class="add-row">
       <input id="nameInput" placeholder="Add player name" />
       <button class="add-btn" id="addBtn">+</button>
@@ -391,6 +469,15 @@
     </div>
     <div class="locked-pairs" id="lockedPairsWrap"></div>
   </div>
+
+  <div class="setup-section">
+    <div class="setup-label">Settings Lock</div>
+    <div class="add-row">
+      <button class="lock-btn" id="setPinBtn" style="background:rgba(255,255,255,0.1);">Set / change PIN</button>
+      <button class="lock-btn" id="clearPinBtn" style="background:rgba(255,255,255,0.1);">Remove PIN</button>
+    </div>
+    <div class="setup-hint" id="pinStatusHint">No PIN set — anyone can open Settings.</div>
+  </div>
 </div>
 
 <div class="courts" id="courtsWrap"></div>
@@ -405,6 +492,8 @@
   <div class="standings-list" id="standingsWrap"></div>
 </div>
 
+<div id="modalRoot"></div>
+
 <script>
 const COURT_COLORS = [
   { bg: "#0F5132", accent: "#F2C94C" },
@@ -413,10 +502,8 @@ const COURT_COLORS = [
   { bg: "#5C2A2A", accent: "#E8D5A6" },
 ];
 
-const MAX_PLAYERS = 18;
-
 // ---- State ----
-// players: { name, gamesPlayed, wins }
+// players: { name, gamesPlayed, wins, points }
 let players = [];          // full roster, in arrival order
 let waitingQueue = [];     // names: first-come queue for round 1 (players who haven't played yet, plus late arrivals)
 let winnersQueue = [];     // names waiting as "won last game", in order their win happened
@@ -429,6 +516,16 @@ let courts = Array.from({length: numCourts}, () => ({ teamA: [], teamB: [], team
 // courts[i].teamA/teamB store player name strings. We also track partner-history to avoid repeat pairings.
 let partnerHistory = {};   // name -> Set of names they've partnered with
 let renamingName = null;   // name currently being edited in roster list
+
+// Settings PIN lock
+let settingsPin = null;      // string of digits, or null if no PIN set
+let pinEntryBuffer = '';     // digits typed so far in the unlock/set modal
+let pinModalMode = null;     // 'unlock' | 'setNew' | 'setConfirm'
+let pinFirstEntry = '';      // holds first entry while confirming a new PIN
+let pinError = '';
+
+// Pending score entry (shown after a winner button is tapped, before the match is finalized)
+let pendingScore = null; // { courtIdx, winnerTeam, loserTeam }
 
 // Drag state: describes where the dragged player is coming from
 // { source: 'waiting'|'winners'|'losers'|'court', index, courtIdx, team }
@@ -447,8 +544,37 @@ const queueWrap = document.getElementById('queueWrap');
 const queueCount = document.getElementById('queueCount');
 const standingsWrap = document.getElementById('standingsWrap');
 const subtitle = document.getElementById('subtitle');
+const modalRoot = document.getElementById('modalRoot');
+const setPinBtn = document.getElementById('setPinBtn');
+const clearPinBtn = document.getElementById('clearPinBtn');
+const pinStatusHint = document.getElementById('pinStatusHint');
 
-gearBtn.onclick = () => setupPanel.classList.toggle('open');
+gearBtn.onclick = () => {
+  if (setupPanel.classList.contains('open')) {
+    setupPanel.classList.remove('open');
+    return;
+  }
+  if (settingsPin) {
+    openPinModal('unlock');
+  } else {
+    setupPanel.classList.add('open');
+  }
+};
+
+setPinBtn.onclick = () => {
+  pinFirstEntry = '';
+  openPinModal('setNew');
+};
+clearPinBtn.onclick = () => {
+  settingsPin = null;
+  renderPinStatus();
+};
+
+function renderPinStatus() {
+  pinStatusHint.textContent = settingsPin
+    ? 'PIN is set — Settings will ask for it next time it\'s opened.'
+    : 'No PIN set — anyone can open Settings.';
+}
 
 function findPlayer(name) {
   return players.find(p => p.name === name);
@@ -500,15 +626,11 @@ nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer();
 function addPlayer() {
   const name = nameInput.value.trim();
   if (!name) return;
-  if (players.length >= MAX_PLAYERS) {
-    nameInput.value = '';
-    return;
-  }
   if (findPlayer(name)) {
     nameInput.value = '';
     return;
   }
-  players.push({ name, gamesPlayed: 0, wins: 0 });
+  players.push({ name, gamesPlayed: 0, wins: 0, points: 0 });
   waitingQueue.push(name);
   nameInput.value = '';
   renderAll();
@@ -748,23 +870,48 @@ function removePlayerFromCourt(courtIdx, team, playerIdx) {
   renderAll();
 }
 
+// Step 1: winner button tapped -> open score entry modal instead of finalizing immediately.
 function reportResult(courtIdx, winnerTeam) {
   const court = courts[courtIdx];
   const loserTeam = winnerTeam === 'teamA' ? 'teamB' : 'teamA';
+  if (court[winnerTeam].length < 2 || court[loserTeam].length < 2) return;
+  pendingScore = { courtIdx, winnerTeam, loserTeam };
+  renderModal();
+}
+
+// Step 2: score modal confirmed (or skipped) -> finalize the match.
+function finalizeResult(winnerScore, loserScore) {
+  if (!pendingScore) return;
+  const { courtIdx, winnerTeam, loserTeam } = pendingScore;
+  const court = courts[courtIdx];
   const winners = court[winnerTeam];
   const losers = court[loserTeam];
-  if (winners.length < 2 || losers.length < 2) return;
 
   winners.forEach(name => {
     const p = findPlayer(name);
-    if (p) p.wins += 1;
+    if (p) {
+      p.wins += 1;
+      if (typeof winnerScore === 'number') p.points += winnerScore;
+    }
   });
+  if (typeof loserScore === 'number') {
+    losers.forEach(name => {
+      const p = findPlayer(name);
+      if (p) p.points += loserScore;
+    });
+  }
 
   winnersQueue = [...winnersQueue, ...winners];
   losersQueue = [...losersQueue, ...losers];
 
   courts[courtIdx] = { teamA: [], teamB: [], teamAWon: null };
+  pendingScore = null;
   renderAll();
+}
+
+function cancelScoreEntry() {
+  // Same as finalizing with no score recorded — the match result (win/loss) still counts.
+  finalizeResult(null, null);
 }
 
 function clearCourt(courtIdx) {
@@ -1159,9 +1306,9 @@ function renderCourtSlotHtml(courtIdx, team, index, name, color) {
 
 // The queue should always show every roster player who is NOT currently on a court —
 // whether they haven't played yet (waitingQueue) or have just finished a game
-// (winnersQueue / losersQueue) — regardless of whether the full 18-player roster has
+// (winnersQueue / losersQueue) — regardless of whether the full roster has
 // been filled or whether every player has played at least once. This way, with fewer
-// than 18 players, someone who just finished a match reappears in the queue immediately
+// players on the roster, someone who just finished a match reappears in the queue immediately
 // and can be dragged into a new match right away.
 function renderQueue() {
   const total = waitingQueue.length + winnersQueue.length + losersQueue.length;
@@ -1169,7 +1316,6 @@ function renderQueue() {
 
   if (total === 0) {
     queueWrap.innerHTML = `<div class="queue-empty">No one waiting. Add players above.</div>`;
-    subtitle.textContent = 'winners stay · losers rotate';
     return;
   }
 
@@ -1204,12 +1350,6 @@ function renderQueue() {
   html += `</div>`;
   queueWrap.innerHTML = html;
 
-  const allPlayed = players.length > 0 && players.every(p => p.gamesPlayed > 0);
-  const yetToPlay = players.filter(p => p.gamesPlayed === 0 && !nameOnAnyCourt(p.name)).length;
-  subtitle.textContent = allPlayed
-    ? 'round robin: winners vs winners, losers vs losers'
-    : `first-come rotation · ${yetToPlay} yet to play`;
-
   queueWrap.querySelectorAll('[data-rmq]').forEach(btn => {
     btn.onclick = () => {
       const [which, i] = btn.dataset.rmq.split('|');
@@ -1230,12 +1370,18 @@ function renderQueue() {
   });
 }
 
+// Standings: ranked highest to lowest, primarily by total running score (points),
+// with total wins shown alongside. Ties broken by wins, then games played.
 function renderStandings() {
   if (players.length === 0) {
     standingsWrap.innerHTML = `<div class="queue-empty">No players yet.</div>`;
     return;
   }
-  const sorted = [...players].sort((a, b) => b.wins - a.wins || b.gamesPlayed - a.gamesPlayed);
+  const sorted = [...players].sort((a, b) =>
+    (b.points || 0) - (a.points || 0) ||
+    b.wins - a.wins ||
+    b.gamesPlayed - a.gamesPlayed
+  );
   standingsWrap.innerHTML = '';
   sorted.forEach((p, i) => {
     const row = document.createElement('div');
@@ -1244,9 +1390,170 @@ function renderStandings() {
     row.innerHTML = `<span class="rank">${i+1}</span>
       <span class="pname">${escapeHtml(p.name)}${partner ? ` <span style="opacity:.5;font-weight:500;">🔗${escapeHtml(partner)}</span>` : ''}</span>
       <span class="pstat">${p.gamesPlayed} played</span>
-      <span class="pwins">${p.wins}W</span>`;
+      <span class="pwins">${p.wins}W</span>
+      <span class="pscore">${p.points || 0} pts</span>`;
     standingsWrap.appendChild(row);
   });
+}
+
+// ---- Score entry modal ----
+function renderScoreModal() {
+  if (!pendingScore) return '';
+  const { courtIdx, winnerTeam, loserTeam } = pendingScore;
+  const court = courts[courtIdx];
+  const winnerNames = court[winnerTeam].join(' & ');
+  const loserNames = court[loserTeam].join(' & ');
+
+  return `<div class="modal-overlay" id="scoreOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Enter the score</div>
+      <div class="modal-sub">Court ${courtIdx + 1} · optional, you can skip</div>
+      <div class="score-row winner-row">
+        <span class="team-label">🏆 ${escapeHtml(winnerNames)}</span>
+        <input type="number" inputmode="numeric" class="score-input" id="winnerScoreInput" placeholder="0" />
+      </div>
+      <div class="score-row">
+        <span class="team-label">${escapeHtml(loserNames)}</span>
+        <input type="number" inputmode="numeric" class="score-input" id="loserScoreInput" placeholder="0" />
+      </div>
+      <div class="modal-btn-row">
+        <button class="modal-btn skip" id="skipScoreBtn">Skip</button>
+        <button class="modal-btn confirm" id="confirmScoreBtn">Save score</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function wireScoreModal() {
+  const overlay = document.getElementById('scoreOverlay');
+  if (!overlay) return;
+  const winnerInput = document.getElementById('winnerScoreInput');
+  const loserInput = document.getElementById('loserScoreInput');
+  document.getElementById('skipScoreBtn').onclick = () => cancelScoreEntry();
+  document.getElementById('confirmScoreBtn').onclick = () => {
+    const w = winnerInput.value.trim() === '' ? null : parseInt(winnerInput.value, 10);
+    const l = loserInput.value.trim() === '' ? null : parseInt(loserInput.value, 10);
+    finalizeResult(Number.isFinite(w) ? w : null, Number.isFinite(l) ? l : null);
+  };
+  setTimeout(() => winnerInput && winnerInput.focus(), 50);
+}
+
+// ---- PIN modal ----
+function openPinModal(mode) {
+  pinModalMode = mode;
+  pinEntryBuffer = '';
+  pinError = '';
+  renderModal();
+}
+
+function closePinModal() {
+  pinModalMode = null;
+  pinEntryBuffer = '';
+  pinError = '';
+  renderModal();
+}
+
+function pinKeyPress(digit) {
+  if (pinEntryBuffer.length >= 4) return;
+  pinEntryBuffer += digit;
+  renderModal();
+  if (pinEntryBuffer.length === 4) {
+    setTimeout(() => handlePinComplete(), 120);
+  }
+}
+
+function pinBackspace() {
+  pinEntryBuffer = pinEntryBuffer.slice(0, -1);
+  renderModal();
+}
+
+function handlePinComplete() {
+  if (pinModalMode === 'unlock') {
+    if (pinEntryBuffer === settingsPin) {
+      closePinModal();
+      setupPanel.classList.add('open');
+    } else {
+      pinError = 'Incorrect PIN, try again.';
+      pinEntryBuffer = '';
+      renderModal();
+    }
+  } else if (pinModalMode === 'setNew') {
+    pinFirstEntry = pinEntryBuffer;
+    pinEntryBuffer = '';
+    pinModalMode = 'setConfirm';
+    renderModal();
+  } else if (pinModalMode === 'setConfirm') {
+    if (pinEntryBuffer === pinFirstEntry) {
+      settingsPin = pinEntryBuffer;
+      closePinModal();
+      renderPinStatus();
+    } else {
+      pinError = "PINs didn't match, try again.";
+      pinEntryBuffer = '';
+      pinFirstEntry = '';
+      pinModalMode = 'setNew';
+      renderModal();
+    }
+  }
+}
+
+function renderPinModal() {
+  if (!pinModalMode) return '';
+  const title = pinModalMode === 'unlock' ? 'Enter PIN to open Settings'
+    : pinModalMode === 'setNew' ? 'Choose a new PIN'
+    : 'Confirm your new PIN';
+
+  let dots = '';
+  for (let i = 0; i < 4; i++) {
+    dots += `<div class="pin-dot ${i < pinEntryBuffer.length ? 'filled' : ''}"></div>`;
+  }
+
+  const keys = [1,2,3,4,5,6,7,8,9];
+  let keypadHtml = keys.map(k => `<button class="pin-key" data-pinkey="${k}">${k}</button>`).join('');
+  keypadHtml += `<button class="pin-key wide" id="pinCancelBtn">Cancel</button>`;
+  keypadHtml += `<button class="pin-key" data-pinkey="0">0</button>`;
+  keypadHtml += `<button class="pin-key wide" id="pinBackBtn">⌫</button>`;
+
+  return `<div class="modal-overlay" id="pinOverlay">
+    <div class="modal-card">
+      <div class="modal-title" style="text-align:center;">${title}</div>
+      <div class="pin-dots">${dots}</div>
+      <div class="pin-error">${pinError}</div>
+      <div class="pin-keypad">${keypadHtml}</div>
+      ${pinModalMode === 'unlock' ? `<button class="pin-forgot" id="pinForgotBtn">Forgot PIN? Remove it</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function wirePinModal() {
+  const overlay = document.getElementById('pinOverlay');
+  if (!overlay) return;
+  overlay.querySelectorAll('[data-pinkey]').forEach(btn => {
+    btn.onclick = () => pinKeyPress(btn.dataset.pinkey);
+  });
+  const backBtn = document.getElementById('pinBackBtn');
+  if (backBtn) backBtn.onclick = () => pinBackspace();
+  const cancelBtn = document.getElementById('pinCancelBtn');
+  if (cancelBtn) cancelBtn.onclick = () => closePinModal();
+  const forgotBtn = document.getElementById('pinForgotBtn');
+  if (forgotBtn) forgotBtn.onclick = () => {
+    settingsPin = null;
+    closePinModal();
+    setupPanel.classList.add('open');
+    renderPinStatus();
+  };
+}
+
+function renderModal() {
+  if (pinModalMode) {
+    modalRoot.innerHTML = renderPinModal();
+    wirePinModal();
+  } else if (pendingScore) {
+    modalRoot.innerHTML = renderScoreModal();
+    wireScoreModal();
+  } else {
+    modalRoot.innerHTML = '';
+  }
 }
 
 function escapeHtml(str) {
@@ -1259,12 +1566,19 @@ function escapeAttr(str) {
   return escapeHtml(str).replace(/"/g, '&quot;');
 }
 
+function renderHeaderCount() {
+  subtitle.textContent = `${players.length} player${players.length === 1 ? '' : 's'} entered`;
+}
+
 function renderAll() {
   renderCountBtns();
+  renderHeaderCount();
   renderRoster();
   renderCourts();
   renderQueue();
   renderStandings();
+  renderPinStatus();
+  renderModal();
 }
 
 renderAll();
@@ -1272,3 +1586,4 @@ renderAll();
 
 </body>
 </html>
+
