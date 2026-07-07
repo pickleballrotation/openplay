@@ -21,11 +21,38 @@
     justify-content: space-between;
     border-bottom: 1px solid rgba(255,255,255,0.1);
   }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #F2C94C 0%, #10b981 50%, #6366f1 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 19px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+  }
   .header h1 {
     margin: 0;
     font-size: 26px;
     font-weight: 900;
-    letter-spacing: -0.5px;
+    letter-spacing: -0.8px;
+    background: linear-gradient(90deg, #ffffff 0%, #cfd8ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .header h1 .accent {
+    background: linear-gradient(90deg, #F2C94C, #10b981);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
   .header p {
     margin: 2px 0 0;
@@ -396,6 +423,10 @@
     background: none; border: none; color: rgba(255,255,255,0.3);
     font-size: 14px; padding: 4px; line-height: 1; flex-shrink: 0;
   }
+  .swap-winner-btn {
+    background: none; border: none; color: rgba(255,255,255,0.3);
+    font-size: 14px; padding: 4px; line-height: 1; flex-shrink: 0;
+  }
   .offline-banner {
     display: none;
     padding: 8px 20px;
@@ -490,6 +521,7 @@
   }
   .modal-btn.skip { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
   .modal-btn.confirm { background: #10b981; color: #000; }
+  .modal-btn.swap { background: rgba(99,102,241,0.18); color: #a5b4fc; }
 
   .confirm-text { font-size: 14px; color: rgba(255,255,255,0.6); font-weight: 500; line-height: 1.4; }
   .modal-btn.danger { background: #ef4444; color: #fff; }
@@ -528,9 +560,12 @@
 <div class="recovered-banner" id="recoveredBanner">✅ Restored your last session <button id="dismissRecoveredBtn">Dismiss</button></div>
 
 <div class="header">
-  <div>
-    <h1>Club App</h1>
-    <p id="subtitle">0 players entered</p>
+  <div class="brand">
+    <div class="brand-mark">🏆</div>
+    <div>
+      <h1>Club<span class="accent">Play</span></h1>
+      <p id="subtitle">0 players entered</p>
+    </div>
   </div>
   <button class="gear" id="gearBtn">⚙</button>
 </div>
@@ -1208,6 +1243,80 @@ function saveEditedScore(matchId, winnerScore, loserScore) {
   saveState();
 }
 
+// Swaps which team is recorded as the winner for a completed match. Reverses the
+// win/points bookkeeping for both the players and the winners/losers queues, then
+// re-applies everything with winners and losers flipped. Scores (if any) travel
+// with the players record they belonged to, since the teams themselves haven't moved,
+// only the winner/loser label has.
+function swapMatchWinner(matchId) {
+  const match = findMatch(matchId);
+  if (!match) return;
+
+  const oldWinners = match.names.winners;
+  const oldLosers = match.names.losers;
+  const oldWinnerScore = match.winnerScore;
+  const oldLoserScore = match.loserScore;
+
+  // Undo old win credit + points
+  oldWinners.forEach(name => {
+    const p = findPlayer(name);
+    if (p) {
+      p.wins = Math.max(0, p.wins - 1);
+      if (typeof oldWinnerScore === 'number') p.points -= oldWinnerScore;
+    }
+  });
+  if (typeof oldLoserScore === 'number') {
+    oldLosers.forEach(name => {
+      const p = findPlayer(name);
+      if (p) p.points -= oldLoserScore;
+    });
+  }
+
+  // Flip winners/losers and their scores
+  match.names.winners = oldLosers;
+  match.names.losers = oldWinners;
+  match.winnerScore = oldLoserScore;
+  match.loserScore = oldWinnerScore;
+
+  // Re-apply win credit + points to the new winners
+  match.names.winners.forEach(name => {
+    const p = findPlayer(name);
+    if (p) {
+      p.wins += 1;
+      if (typeof match.winnerScore === 'number') p.points += match.winnerScore;
+    }
+  });
+  if (typeof match.loserScore === 'number') {
+    match.names.losers.forEach(name => {
+      const p = findPlayer(name);
+      if (p) p.points += match.loserScore;
+    });
+  }
+
+  // The winners/losers queues just track who's next up after a match; swap the two
+  // groups' most recent membership there too so future match-forming logic is consistent.
+  // Since queue order otherwise doesn't carry meaning tied to win/loss beyond tagging,
+  // simplest correct fix is to swap tags for exactly one occurrence of each name
+  // from the end (most recently appended by this match).
+  swapMostRecentQueueTags(oldWinners, oldLosers);
+
+  renderAll();
+  saveState();
+}
+
+function swapMostRecentQueueTags(namesToRemoveFromWinners, namesToRemoveFromLosers) {
+  namesToRemoveFromWinners.forEach(name => {
+    const idx = winnersQueue.lastIndexOf(name);
+    if (idx >= 0) winnersQueue.splice(idx, 1);
+  });
+  namesToRemoveFromLosers.forEach(name => {
+    const idx = losersQueue.lastIndexOf(name);
+    if (idx >= 0) losersQueue.splice(idx, 1);
+  });
+  losersQueue = [...losersQueue, ...namesToRemoveFromWinners];
+  winnersQueue = [...winnersQueue, ...namesToRemoveFromLosers];
+}
+
 function refreshStandings() {
   renderStandings();
 }
@@ -1780,12 +1889,16 @@ function renderStandings() {
           ${escapeHtml(m.names.losers.join(' & '))}
         </span>
         <span class="pstat">${scoreText}</span>
-        <button class="edit-score-btn" data-editmatch="${m.id}">✏️</button>`;
+        <button class="swap-winner-btn" data-swapmatch="${m.id}" title="Wrong team won? Swap it">🔄</button>
+        <button class="edit-score-btn" data-editmatch="${m.id}" title="Edit score">✏️</button>`;
       standingsWrap.appendChild(row);
     });
 
     standingsWrap.querySelectorAll('[data-editmatch]').forEach(btn => {
       btn.onclick = () => openEditScore(parseInt(btn.dataset.editmatch));
+    });
+    standingsWrap.querySelectorAll('[data-swapmatch]').forEach(btn => {
+      btn.onclick = () => swapMatchWinner(parseInt(btn.dataset.swapmatch));
     });
   }
 }
@@ -1838,6 +1951,7 @@ function renderScoreModal() {
           <button class="modal-btn skip" id="skipScoreBtn">Cancel</button>
           <button class="modal-btn confirm" id="confirmScoreBtn">Save correction</button>
         </div>
+        <button class="modal-btn swap" id="swapFromEditBtn" style="margin-top:-4px;">🔄 Wrong team won — swap winner</button>
       </div>
     </div>`;
   }
@@ -1865,6 +1979,14 @@ function wireScoreModal() {
       const l = loserInput.value.trim() === '' ? null : parseInt(loserInput.value, 10);
       saveEditedScore(editingMatchId, Number.isFinite(w) ? w : null, Number.isFinite(l) ? l : null);
     };
+    const swapBtn = document.getElementById('swapFromEditBtn');
+    if (swapBtn) {
+      swapBtn.onclick = () => {
+        const idToSwap = editingMatchId;
+        editingMatchId = null;
+        swapMatchWinner(idToSwap);
+      };
+    }
   }
   setTimeout(() => winnerInput && winnerInput.focus(), 50);
 }
