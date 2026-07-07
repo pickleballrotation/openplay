@@ -211,6 +211,14 @@
   .empty-court:disabled { opacity: 0.3; }
   .empty-court.drag-over { border-color: #fff; background: rgba(255,255,255,0.08); }
   .team { display: flex; flex-direction: column; gap: 6px; }
+  .team-heading {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    padding-left: 2px;
+  }
   .team-slot {
     border-radius: 10px;
     transition: outline 0.1s ease;
@@ -1076,12 +1084,15 @@ function renderCourts() {
         <span style="font-size:11px;opacity:0.6;">or drag players here</span>
       </button>`;
     } else {
+      html += `<div class="team-heading" style="color:${color.accent}">TEAM 1</div>`;
       html += `<div class="team" data-team-wrap="${idx}|teamA">`;
       for (let i = 0; i < 2; i++) {
         const p = court.teamA[i];
         html += renderCourtSlotHtml(idx, 'teamA', i, p, color);
       }
-      html += `</div><div class="vs">VS</div><div class="team" data-team-wrap="${idx}|teamB">`;
+      html += `</div><div class="vs">VS</div>`;
+      html += `<div class="team-heading" style="color:${color.accent}">TEAM 2</div>`;
+      html += `<div class="team" data-team-wrap="${idx}|teamB">`;
       for (let i = 0; i < 2; i++) {
         const p = court.teamB[i];
         html += renderCourtSlotHtml(idx, 'teamB', i, p, color);
