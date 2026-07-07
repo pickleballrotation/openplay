@@ -464,6 +464,11 @@ function lockedPartnerOf(name) {
   return pair[0] === name ? pair[1] : pair[0];
 }
 
+// A player currently sitting on a court (mid-match) shouldn't also appear in the queue.
+function nameOnAnyCourt(name) {
+  return courts.some(c => c.teamA.includes(name) || c.teamB.includes(name));
+}
+
 // ---- Setup: players & locking ----
 function renderCountBtns() {
   countBtns.innerHTML = '';
@@ -1141,9 +1146,14 @@ function renderCourtSlotHtml(courtIdx, team, index, name, color) {
   </div>`;
 }
 
+// The queue should always show every roster player who is NOT currently on a court —
+// whether they haven't played yet (waitingQueue) or have just finished a game
+// (winnersQueue / losersQueue) — regardless of whether the full 18-player roster has
+// been filled or whether every player has played at least once. This way, with fewer
+// than 18 players, someone who just finished a match reappears in the queue immediately
+// and can be dragged into a new match right away.
 function renderQueue() {
-  const allPlayed = players.length > 0 && players.every(p => p.gamesPlayed > 0);
-  const total = waitingQueue.length + (allPlayed ? winnersQueue.length + losersQueue.length : 0);
+  const total = waitingQueue.length + winnersQueue.length + losersQueue.length;
   queueCount.textContent = total;
 
   if (total === 0) {
@@ -1163,30 +1173,31 @@ function renderQueue() {
     </div>`;
   });
 
-  if (allPlayed) {
-    winnersQueue.forEach((name, i) => {
-      html += `<div class="queue-chip tag-winner" data-qsource="winners" data-qindex="${i}">
-        <span class="drag-handle">⠿</span>
-        <span class="tagline">W</span>
-        <span class="name">${escapeHtml(name)}</span>
-        <button data-rmq="winners|${i}">✕</button>
-      </div>`;
-    });
-    losersQueue.forEach((name, i) => {
-      html += `<div class="queue-chip tag-loser" data-qsource="losers" data-qindex="${i}">
-        <span class="drag-handle">⠿</span>
-        <span class="tagline">L</span>
-        <span class="name">${escapeHtml(name)}</span>
-        <button data-rmq="losers|${i}">✕</button>
-      </div>`;
-    });
-  }
+  winnersQueue.forEach((name, i) => {
+    html += `<div class="queue-chip tag-winner" data-qsource="winners" data-qindex="${i}">
+      <span class="drag-handle">⠿</span>
+      <span class="tagline">W</span>
+      <span class="name">${escapeHtml(name)}</span>
+      <button data-rmq="winners|${i}">✕</button>
+    </div>`;
+  });
+  losersQueue.forEach((name, i) => {
+    html += `<div class="queue-chip tag-loser" data-qsource="losers" data-qindex="${i}">
+      <span class="drag-handle">⠿</span>
+      <span class="tagline">L</span>
+      <span class="name">${escapeHtml(name)}</span>
+      <button data-rmq="losers|${i}">✕</button>
+    </div>`;
+  });
 
   html += `</div>`;
   queueWrap.innerHTML = html;
+
+  const allPlayed = players.length > 0 && players.every(p => p.gamesPlayed > 0);
+  const yetToPlay = players.filter(p => p.gamesPlayed === 0 && !nameOnAnyCourt(p.name)).length;
   subtitle.textContent = allPlayed
     ? 'round robin: winners vs winners, losers vs losers'
-    : `first-come rotation · ${players.filter(p => p.gamesPlayed === 0).length} yet to play`;
+    : `first-come rotation · ${yetToPlay} yet to play`;
 
   queueWrap.querySelectorAll('[data-rmq]').forEach(btn => {
     btn.onclick = () => {
@@ -1250,4 +1261,3 @@ renderAll();
 
 </body>
 </html>
-
